@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+from uuid import UUID
+
+from fastapi import APIRouter, Request, Response, status
+
+from quantum_light_engine.api.errors import not_found, state_conflict
+from quantum_light_engine.devices.discovery import SavedProfileDiscovery
+from quantum_light_engine.devices.models import DeviceProfileCreate, DeviceProfileUpdate
+from quantum_light_engine.devices.session import DeviceSession
+from quantum_light_engine.devices.session_manager import DeviceSessionManager
+
+router = APIRouter(prefix="/api/v1/devices")
+
+
+def _manager(request: Request) -> DeviceSessionManager:
+    return request.app.state.session_manager  # type: ignore[no-any-return]
+
+
+def _session(request: Request, device_id: UUID) -> DeviceSession:
+    session = _manager(request).get(device_id)
+    if session is None:
+        raise not_found(device_id)
+    return session
+
+
+def _combined(session: DeviceSession) -> dict[str, Any]:
+    return {
+        **session.profile.model_dump(mode="json", by_alias=True),
+        "runtime": session.status(),
+    }
+
+
+@router.get("")
+async def list_devices(request: Request) -> list[dict[str, Any]]:
+    return [_combined(session) for session in _manager(request).sessions()]
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def create_device(request: Request, profile: DeviceProfileCreate) -> dict[str, Any]:
+    try:
+        return _combined(await _manager(request).create(profile))
+    except ValueError as exc:
+        raise state_conflict(UUID(int=0), str(exc)) from exc
+
+
+@router.post("/discover")
+async def discover_devices(request: Request, timeout_seconds: float = 1.0) -> list[dict[str, Any]]:
+    bounded = min(max(timeout_seconds, 0.05), 10.0)
+    provider = SavedProfileDiscovery(_manager(request).repository)
+    devices = await asyncio.wait_for(provider.discover(bounded), timeout=bounded)
+    return [device.model_dump() for device in devices]
+
+
+@router.get("/{device_id}")
+async def get_device(request: Request, device_id: UUID) -> dict[str, Any]:
+    return _combined(_session(request, device_id))
+
+
+@router.put("/{device_id}")
+async def update_device(
+    request: Request, device_id: UUID, profile: DeviceProfileUpdate
+) -> dict[str, Any]:
+    try:
+        return _combined(await _manager(request).update(device_id, profile))
+    except KeyError as exc:
+        raise not_found(device_id) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise state_conflict(device_id, str(exc)) from exc
+
+
+@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_device(request: Request, device_id: UUID) -> Response:
+    try:
+        await _manager(request).delete(device_id)
+    except KeyError as exc:
+        raise not_found(device_id) from exc
+    except RuntimeError as exc:
+        raise state_conflict(device_id, str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def _lifecycle(request: Request, device_id: UUID, operation: str) -> dict[str, Any]:
+    session = _session(request, device_id)
+    try:
+        result: dict[str, Any] = await getattr(session, operation)()
+        return result
+    except Exception as exc:
+        lifecycle_conflict = isinstance(exc, RuntimeError) and "current state" in str(exc).lower()
+        code = 409 if lifecycle_conflict else 503
+        if code == 503:
+            from quantum_light_engine.api.errors import EngineApiError
+
+            raise EngineApiError(
+                "streaming-component-unavailable",
+                "Streaming component unavailable",
+                503,
+                str(exc),
+                device_id,
+            ) from exc
+        raise state_conflict(device_id, str(exc)) from exc
+
+
+@router.post("/{device_id}/connect")
+async def connect(request: Request, device_id: UUID) -> dict[str, Any]:
+    return await _lifecycle(request, device_id, "connect")
+
+
+@router.post("/{device_id}/disconnect")
+async def disconnect(request: Request, device_id: UUID) -> dict[str, Any]:
+    return await _lifecycle(request, device_id, "disconnect")
+
+
+@router.post("/{device_id}/start")
+async def start(request: Request, device_id: UUID) -> dict[str, Any]:
+    return await _lifecycle(request, device_id, "start")
+
+
+@router.post("/{device_id}/stop")
+async def stop(request: Request, device_id: UUID) -> dict[str, Any]:
+    return await _lifecycle(request, device_id, "stop")
+
+
+@router.get("/{device_id}/status")
+async def device_status(request: Request, device_id: UUID) -> dict[str, Any]:
+    return _session(request, device_id).status()
+
+
+@router.get("/{device_id}/latest")
+async def latest(request: Request, device_id: UUID) -> dict[str, Any]:
+    metadata = _session(request, device_id).manager.latest_metadata()
+    if metadata is None:
+        from quantum_light_engine.api.errors import EngineApiError
+
+        raise EngineApiError(
+            "frame-not-available",
+            "No frame available",
+            404,
+            "The device has not produced a valid frame.",
+            device_id,
+        )
+    return metadata
