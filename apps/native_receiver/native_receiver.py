@@ -6,14 +6,12 @@ import json
 import logging
 import os
 import queue
-import struct
 import subprocess
 import sys
 import threading
 import time
 import tkinter as tk
 from collections.abc import Callable
-from dataclasses import dataclass, replace
 from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
@@ -27,17 +25,22 @@ try:
 except ImportError as exc:  # pragma: no cover - user-facing startup guard
     raise SystemExit("Missing dependency. Run this with `uv run`.") from exc
 
+from apps.native_receiver.protocol import Device, SampleFrame, SampleHistory, parse_frame
+from apps.native_receiver.settings import (
+    SIGNAL_SCRIPT_FEATURE_ENV,
+    AppSettings,
+    load_cluster_config,
+    load_settings,
+    save_cluster_config,
+    save_settings,
+    signal_script_feature_enabled,
+)
 from quantum_light_engine.post_processing import (
     ClusterProcessingConfig,
     ClusterProcessingResult,
     RealtimeClusterProcessor,
-    config_from_dict,
-    config_to_dict,
 )
 
-HEADER = struct.Struct("<4sBBHQQQQdIIIIQQ")
-HEADER_SIZE = 80
-MAGIC = b"RPA1"
 MAX_POINTS = 800
 # About 34 seconds at 488 kS/s; two int16 channels use at most 64 MiB.
 # Plotting still reads only the selected display resolution from the ring.
@@ -77,10 +80,7 @@ ENGINE_PROCESS_TITLE = "RPs Server"
 TOAST_VISIBLE_MS = 5000
 TOAST_FADE_INTERVAL_MS = 50
 TOAST_FADE_STEPS = 10
-WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
-SETTINGS_PATH = WORKSPACE_ROOT / "data" / "native_receiver_settings.json"
-CLUSTER_CONFIG_PATH = WORKSPACE_ROOT / "data" / "cluster_processing.json"
-SIGNAL_SCRIPT_FEATURE_ENV = "QL_NATIVE_RECEIVER_SIGNAL_SCRIPT"
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DISCONNECTED_STATES = {"", "-", "disconnected"}
 STREAMING_STATES = {"streaming", "reconnecting", "starting"}
 READY_STATES = {"ready"}
@@ -145,8 +145,7 @@ COLORS = {
     "plot_axis": "#425168",
     "plot_annotation": "#b6c0cf",
 }
-# Compatibility aliases keep rendering and focused tests stable while all new
-# UI work uses the semantic names above.
+# Short aliases used by the Tk style definitions below.
 COLORS.update(
     {
         "panel": COLORS["surface"],
@@ -154,12 +153,9 @@ COLORS.update(
         "panel_3": COLORS["surface_active"],
         "muted": COLORS["text_secondary"],
         "grid": COLORS["border_subtle"],
-        "axis": COLORS["plot_axis"],
         "warn": COLORS["warning"],
-        "accent_hover": COLORS["accent_hover"],
     }
 )
-SPACING = {"xxs": 4, "xs": 8, "sm": 12, "md": 16, "lg": 24, "xl": 32}
 FONTS = {
     "small": ("Segoe UI", 8),
     "body": ("Segoe UI", 9),
@@ -176,125 +172,6 @@ DIMENSIONS = {
     "min_width": 960,
     "min_height": 640,
 }
-
-
-@dataclass(frozen=True)
-class Device:
-    id: str
-    name: str
-    host: str
-    state: str
-    channel_1_enabled: bool
-    channel_2_enabled: bool
-    decimation: int
-    block_size_bytes: int
-
-
-@dataclass(frozen=True)
-class SampleFrame:
-    channel_mask: int
-    sequence: int
-    sample_rate_hz: float
-    samples_per_channel: int
-    flags: int
-    fpga_lost_ch1: int
-    fpga_lost_ch2: int
-    channel_1: memoryview | None
-    channel_2: memoryview | None
-
-
-class SampleHistory:
-    """Bounded raw-sample ring; callers hold frame_lock for writes and snapshots."""
-
-    def __init__(self, capacity: int = HISTORY_MAX_SAMPLES) -> None:
-        self.capacity = capacity
-        self.clear()
-
-    def clear(self) -> None:
-        self.latest: SampleFrame | None = None
-        self.size = 0
-        self.position = 0
-        self.channels: dict[int, np.ndarray[Any, Any]] = {}
-
-    def frozen_copy(self) -> SampleHistory:
-        frozen = SampleHistory(max(self.size, 1))
-        frozen.latest = self.latest
-        frozen.size = self.size
-        start = (self.position - self.size) % self.capacity
-        first = min(self.size, self.capacity - start)
-        for channel, buffer in self.channels.items():
-            data = np.empty(self.size, dtype=np.int16)
-            data[:first] = buffer[start : start + first]
-            data[first:] = buffer[: self.size - first]
-            frozen.channels[channel] = data
-        return frozen
-
-    def append(self, frame: SampleFrame) -> None:
-        previous = self.latest
-        if previous is not None and (
-            frame.sequence != previous.sequence + 1
-            or frame.channel_mask != previous.channel_mask
-            or frame.sample_rate_hz != previous.sample_rate_hz
-            or frame.samples_per_channel != previous.samples_per_channel
-        ):
-            self.clear()
-        count = min(frame.samples_per_channel, self.capacity)
-        first = min(count, self.capacity - self.position)
-        for channel, samples in ((1, frame.channel_1), (2, frame.channel_2)):
-            if samples is None:
-                continue
-            if channel not in self.channels:
-                self.channels[channel] = np.empty(self.capacity, dtype=np.int16)
-            buffer = self.channels[channel]
-            data = samples_to_numpy(samples)[-count:]
-            buffer[self.position : self.position + first] = data[:first]
-            buffer[: count - first] = data[first:]
-        self.position = (self.position + count) % self.capacity
-        self.size = min(self.size + count, self.capacity)
-        self.latest = frame
-
-    def snapshot(self, requested_samples: int) -> SampleFrame | None:
-        frame = self.latest
-        if frame is None:
-            return None
-        count = min(requested_samples, self.size)
-        if count <= frame.samples_per_channel:
-            return frame
-        start = (self.position - count) % self.capacity
-        first = min(count, self.capacity - start)
-        result: dict[int, memoryview] = {}
-        for channel, buffer in self.channels.items():
-            # Snapshot ownership prevents the socket overwriting samples during drawing.
-            data = np.empty(count, dtype=np.int16)
-            data[:first] = buffer[start : start + first]
-            data[first:] = buffer[: count - first]
-            data.flags.writeable = False
-            result[channel] = memoryview(data)
-        return replace(
-            frame,
-            samples_per_channel=count,
-            channel_1=result.get(1),
-            channel_2=result.get(2),
-        )
-
-    def plot_channels(
-        self, requested_samples: int, point_budget: int = MAX_POINTS
-    ) -> tuple[Any, Any, float, int] | None:
-        if self.latest is None:
-            return None
-        count = min(requested_samples, self.size)
-        limit = max(2, point_budget)
-        indices = np.linspace(0, count - 1, min(count, limit), dtype=np.intp)
-        indices = (self.position - count + indices) % self.capacity
-        first = self.channels[1][indices] if 1 in self.channels else None
-        second = self.channels[2][indices] if 2 in self.channels else None
-        return first, second, self.latest.sample_rate_hz, count
-
-
-@dataclass(frozen=True)
-class AppSettings:
-    api_base: str = "http://127.0.0.1:8080"
-    launch_engine_on_start: bool = True
 
 
 class ApiError(RuntimeError):
@@ -1812,37 +1689,6 @@ class ReceiverApp(tk.Tk):
         action()
         return "break"
 
-    @staticmethod
-    def _stat(parent: ttk.Frame, title: str, value: tk.StringVar, row: int, column: int) -> None:
-        frame = ttk.Frame(parent, padding=7, style="Metric.TFrame")
-        frame.grid(row=row, column=column, sticky="ew", padx=2, pady=2)
-        ttk.Label(frame, text=title, style="Toolbar.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(frame, textvariable=value, style="MetricValue.TLabel").grid(
-            row=1, column=0, sticky="w"
-        )
-
-    def _engine_stat(self, parent: ttk.Frame, row: int, column: int) -> None:
-        frame = ttk.Frame(parent, padding=7, style="Metric.TFrame")
-        frame.grid(row=row, column=column, sticky="ew", padx=2, pady=2)
-        ttk.Label(frame, text="Acquisition engine", style="Toolbar.TLabel").grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
-        self.engine_status_dot = tk.Canvas(
-            frame,
-            width=13,
-            height=13,
-            bg=COLORS["panel_2"],
-            highlightthickness=0,
-            bd=0,
-        )
-        self.engine_status_dot.grid(row=1, column=0, sticky="w", padx=(0, 5))
-        self.engine_status_dot_item = self.engine_status_dot.create_oval(
-            2, 2, 11, 11, fill=COLORS["danger"], outline=COLORS["danger"]
-        )
-        ttk.Label(frame, textvariable=self.engine_status, style="MetricValue.TLabel").grid(
-            row=1, column=1, sticky="w"
-        )
-
     def _build_connection_overlay(self, parent: ttk.Frame) -> None:
         overlay = tk.Toplevel(self)
         overlay.withdraw()
@@ -2650,10 +2496,7 @@ class ReceiverApp(tk.Tk):
             self.cluster_dialog.lift()
             self.cluster_dialog.focus_force()
             return
-        try:
-            from examples.cluster_monitor import ClusterMonitorDialog
-        except ModuleNotFoundError:  # pragma: no cover - direct script execution
-            from cluster_monitor import ClusterMonitorDialog  # type: ignore[no-redef]
+        from apps.native_receiver.cluster_monitor import ClusterMonitorDialog
 
         self.cluster_dialog = ClusterMonitorDialog(self)
 
@@ -3149,9 +2992,6 @@ class ReceiverApp(tk.Tk):
             except tk.TclError:
                 continue
 
-    def _engine_is_running(self) -> bool:
-        return self._engine_is_running_for_base(self._api_base())
-
     def _engine_is_running_for_base(self, api_base: str) -> bool:
         try:
             request = Request(f"{api_base.rstrip('/')}/health/live", method="GET")
@@ -3326,14 +3166,6 @@ class ReceiverApp(tk.Tk):
                 state_label, _tag = self._device_state_label(device.state)
                 summary = f"{device.name} · {state_label.lstrip('●○◐! ')}"
             set_if_changed(self.connection_summary, summary)
-
-    @staticmethod
-    def _device_channel_label(device: Device) -> str:
-        labels = [
-            f"CH1 {'ON' if device.channel_1_enabled else 'OFF'}",
-            f"CH2 {'ON' if device.channel_2_enabled else 'OFF'}",
-        ]
-        return " / ".join(labels)
 
     def add_device(self) -> None:
         dialog = AddRedPitayaDialog(self)
@@ -3563,14 +3395,6 @@ class ReceiverApp(tk.Tk):
                 f"Cannot change channels while backend state is '{state}'. "
                 "Disconnect the device first."
             )
-
-    def _best_effort_disconnect_device(self, device_id: str, runtime_state: str | None) -> None:
-        if str(runtime_state or "").lower() in DISCONNECTED_STATES:
-            return
-        try:
-            self._api("POST", f"/api/v1/devices/{device_id}/disconnect")
-        except Exception as exc:
-            self.status.set(f"disconnect warning: {short_error(exc)}")
 
     def _clear_live_plot(self) -> None:
         self._reset_display_pause()
@@ -4496,65 +4320,6 @@ class ReceiverApp(tk.Tk):
         self.destroy()
 
 
-def load_settings() -> AppSettings:
-    try:
-        data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
-        return AppSettings(
-            api_base=str(data.get("api_base") or AppSettings.api_base),
-            launch_engine_on_start=bool(
-                data.get("launch_engine_on_start", AppSettings.launch_engine_on_start)
-            ),
-        )
-    except FileNotFoundError:
-        return AppSettings()
-    except Exception:
-        return AppSettings()
-
-
-def load_cluster_config() -> ClusterProcessingConfig:
-    try:
-        data = json.loads(CLUSTER_CONFIG_PATH.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            raise ValueError("cluster processing configuration must be an object")
-        return config_from_dict(data)
-    except FileNotFoundError:
-        return ClusterProcessingConfig()
-    except Exception as exc:
-        UI_LOGGER.warning("invalid cluster processing configuration: %s", short_error(exc))
-        return ClusterProcessingConfig()
-
-
-def save_cluster_config(config: ClusterProcessingConfig) -> None:
-    CLUSTER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temporary = CLUSTER_CONFIG_PATH.with_suffix(".tmp")
-    temporary.write_text(json.dumps(config_to_dict(config), indent=2), encoding="utf-8")
-    temporary.replace(CLUSTER_CONFIG_PATH)
-
-
-def signal_script_feature_enabled() -> bool:
-    return os.environ.get(SIGNAL_SCRIPT_FEATURE_ENV, "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-        "enabled",
-    }
-
-
-def save_settings(settings: AppSettings) -> None:
-    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_PATH.write_text(
-        json.dumps(
-            {
-                "api_base": settings.api_base,
-                "launch_engine_on_start": settings.launch_engine_on_start,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-
-
 def editable_profile_payload(profile: dict[str, Any]) -> dict[str, Any]:
     keys = (
         "name",
@@ -4579,17 +4344,6 @@ def short_error(exc: BaseException, limit: int = 90) -> str:
     if len(message) <= limit:
         return message
     return f"{message[: limit - 1]}…"
-
-
-def blend_hex_color(start: str, end: str, progress: float) -> str:
-    bounded = min(max(progress, 0.0), 1.0)
-    start_rgb = tuple(int(start[index : index + 2], 16) for index in (1, 3, 5))
-    end_rgb = tuple(int(end[index : index + 2], 16) for index in (1, 3, 5))
-    values = [
-        round(start_value + (end_value - start_value) * bounded)
-        for start_value, end_value in zip(start_rgb, end_rgb, strict=True)
-    ]
-    return "#{:02x}{:02x}{:02x}".format(*values)
 
 
 def safe_builtins() -> dict[str, Any]:
@@ -4633,54 +4387,6 @@ def normalize_script_channel(value: Any, length: int) -> np.ndarray[Any, Any] | 
         scalar = float(array.reshape(-1)[0])
         return np.full(max(length, 2), scalar, dtype=np.float64)
     return np.nan_to_num(array.reshape(-1).astype(np.float64, copy=False))
-
-
-def parse_frame(message: bytes) -> SampleFrame:
-    if len(message) < HEADER_SIZE:
-        raise ValueError(f"message too short: {len(message)} bytes")
-    values = HEADER.unpack_from(message)
-    magic = values[0]
-    protocol_version = values[1]
-    channel_mask = values[2]
-    header_size = values[3]
-    if magic != MAGIC or protocol_version != 1 or header_size != HEADER_SIZE:
-        raise ValueError(
-            f"unsupported frame: magic={magic!r}, version={protocol_version}, header={header_size}"
-        )
-
-    sequence = int(values[5])
-    sample_rate_hz = float(values[8])
-    samples_per_channel = int(values[10])
-    payload_size = int(values[11])
-    flags = int(values[12])
-    fpga_lost_ch1 = int(values[13])
-    fpga_lost_ch2 = int(values[14])
-
-    payload = memoryview(message)[HEADER_SIZE : HEADER_SIZE + payload_size]
-    samples = payload.cast("h")
-    if sys.byteorder != "little":
-        raise RuntimeError("native receiver currently expects a little-endian host")
-
-    offset = 0
-    channel_1 = None
-    channel_2 = None
-    if channel_mask & 1:
-        channel_1 = samples[offset : offset + samples_per_channel]
-        offset += samples_per_channel
-    if channel_mask & 2:
-        channel_2 = samples[offset : offset + samples_per_channel]
-
-    return SampleFrame(
-        channel_mask=channel_mask,
-        sequence=sequence,
-        sample_rate_hz=sample_rate_hz,
-        samples_per_channel=samples_per_channel,
-        flags=flags,
-        fpga_lost_ch1=fpga_lost_ch1,
-        fpga_lost_ch2=fpga_lost_ch2,
-        channel_1=channel_1,
-        channel_2=channel_2,
-    )
 
 
 def sample_range(samples: Any) -> tuple[float, float] | None:
@@ -4897,6 +4603,26 @@ def draw_spectrum_line(
     )
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> int:
+    """Start the desktop receiver or validate its local startup dependencies."""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="native-receiver")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="validate settings and dependencies without opening a window",
+    )
+    args = parser.parse_args(argv)
+    if args.check:
+        load_settings()
+        load_cluster_config()
+        print("native receiver startup check passed")
+        return 0
     app = ReceiverApp()
     app.mainloop()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

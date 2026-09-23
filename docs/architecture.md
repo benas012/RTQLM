@@ -10,6 +10,10 @@ DeviceSessionManager
     `-- DeviceSession C -- AcquisitionManager -- source/queue/broadcaster
 ```
 
+The separate `apps/native_receiver` application depends on the engine's versioned HTTP and WebSocket
+interfaces. The engine depends on the `redpitaya_acquisition` core; the acquisition core does not depend
+on either application. This one-way dependency keeps UI, service lifecycle, and hardware I/O isolated.
+
 Persistent `DeviceProfile` objects describe configuration. Runtime `DeviceSession` objects own state,
 tasks, sources, counters, and transport. Keeping these separate prevents packet-path work from touching
 profile storage and allows a process restart without persisting transient state.
@@ -33,4 +37,3 @@ session `ready`. `disconnect` stops first when needed and releases the source.
 Individual manager reconnect and fault state is projected into device status. A fault affects only its
 session. Engine readiness means settings, repository, session manager, and API are initialized; a device
 fault does not make the engine unready.
-

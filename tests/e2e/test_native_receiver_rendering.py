@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from examples import native_receiver as nr
+from apps.native_receiver import native_receiver as nr
 
 
 @contextmanager

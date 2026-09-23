@@ -1,3 +1,5 @@
+"""Cluster-nullifier controls used by the native receiver."""
+
 from __future__ import annotations
 
 import json

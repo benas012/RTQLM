@@ -126,9 +126,7 @@ def build_gauss_lin_cos_mode(
     return np.asarray(np.where(in_window, mode, 0.0), dtype=np.float64)
 
 
-def normalize_mode(
-    mode_template: npt.NDArray[np.floating], dt_seconds: float
-) -> FloatArray:
+def normalize_mode(mode_template: npt.NDArray[np.floating], dt_seconds: float) -> FloatArray:
     if dt_seconds <= 0:
         raise ValueError("dt_seconds must be positive")
     mode = np.asarray(mode_template, dtype=np.float64)
@@ -484,6 +482,22 @@ class RealtimeClusterProcessor:
         if discontinuity:
             self.reset_stream()
         self._ensure_mode(sample_rate_hz)
+        extracted = self._extract_quadratures(channel_a, channel_b, sample_rate_hz)
+        if extracted is None:
+            return None
+        raw_quadratures, result_start, dt_seconds = extracted
+        period = self._mode.size * dt_seconds
+        if self._calibrating:
+            return self._calibration_result(raw_quadratures, result_start, period)
+        return self._live_result(raw_quadratures, period)
+
+    def _extract_quadratures(
+        self,
+        channel_a: npt.NDArray[np.number],
+        channel_b: npt.NDArray[np.number],
+        sample_rate_hz: float,
+    ) -> tuple[dict[str, FloatArray], int, float] | None:
+        """Buffer complete temporal modes and return their two quadratures."""
         a = np.asarray(channel_a, dtype=np.float64).reshape(-1)
         b = np.asarray(channel_b, dtype=np.float64).reshape(-1)
         if not self._delay_initialized:
@@ -530,28 +544,33 @@ class RealtimeClusterProcessor:
         self._pending_b = self._pending_b[usable:]
         result_start = self._mode_index
         self._mode_index += mode_count
+        return {"a": quadrature_a, "b": quadrature_b}, result_start, dt_seconds
 
-        raw_quadratures = {"a": quadrature_a, "b": quadrature_b}
-        if self._calibrating:
-            for name, values in raw_quadratures.items():
-                self._moments[name].update(values)
-            return ClusterProcessingResult(
-                mode_period_seconds=self._mode.size * dt_seconds,
-                mode_index_start=result_start,
-                quadratures=raw_quadratures,
-                nullifiers={},
-                variances={},
-                squeezing_db={},
-                shot_noise_coefficients={},
-                calibrated=False,
-                calibrating=True,
-                rejected_modes=self._rejected_modes,
-                status=(
-                    "calibrating shot noise: "
-                    f"A={self._moments['a'].count}, B={self._moments['b'].count} modes"
-                ),
-            )
+    def _calibration_result(
+        self, raw_quadratures: dict[str, FloatArray], result_start: int, period: float
+    ) -> ClusterProcessingResult:
+        for name, values in raw_quadratures.items():
+            self._moments[name].update(values)
+        return ClusterProcessingResult(
+            mode_period_seconds=period,
+            mode_index_start=result_start,
+            quadratures=raw_quadratures,
+            nullifiers={},
+            variances={},
+            squeezing_db={},
+            shot_noise_coefficients={},
+            calibrated=False,
+            calibrating=True,
+            rejected_modes=self._rejected_modes,
+            status=(
+                "calibrating shot noise: "
+                f"A={self._moments['a'].count}, B={self._moments['b'].count} modes"
+            ),
+        )
 
+    def _live_result(
+        self, raw_quadratures: dict[str, FloatArray], period: float
+    ) -> ClusterProcessingResult:
         normalized = {
             name: values * self._shot_noise_coefficients.get(name, 1.0)
             for name, values in raw_quadratures.items()
@@ -563,7 +582,6 @@ class RealtimeClusterProcessor:
         nullifiers: dict[str, FloatArray] = {}
         variances: dict[str, FloatArray] = {}
         squeezing: dict[str, FloatArray] = {}
-        period = self._mode.size * dt_seconds
         variance_points = max(round(self.config.variance_window_seconds / period), 2)
         for spec in self.config.nullifiers:
             nullifier = compute_nullifier(self._quadrature_history, spec)

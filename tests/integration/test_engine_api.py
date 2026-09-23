@@ -28,7 +28,7 @@ def device_body(name: str = "Sim", *, default: bool = True) -> dict[str, object]
     }
 
 
-def test_device_crud_lifecycle_and_legacy_routes(tmp_path: Path) -> None:
+def test_device_crud_and_lifecycle(tmp_path: Path) -> None:
     with TestClient(app_for(tmp_path)) as client:
         created = client.post("/api/v1/devices", json=device_body())
         assert created.status_code == 201
@@ -41,9 +41,6 @@ def test_device_crud_lifecycle_and_legacy_routes(tmp_path: Path) -> None:
         update = client.put(f"/api/v1/devices/{device_id}", json=device_body("Changed"))
         assert update.status_code == 409
         assert client.get(f"/api/v1/devices/{device_id}/latest").status_code == 200
-        legacy = client.get("/api/status")
-        assert legacy.status_code == 200
-        assert legacy.headers["X-QuantumLight-Deprecated"] == "true"
         assert client.post(f"/api/v1/devices/{device_id}/stop").json()["state"] == "ready"
         assert (
             client.post(f"/api/v1/devices/{device_id}/disconnect").json()["state"] == "disconnected"
@@ -79,7 +76,15 @@ def test_device_websocket_preserves_binary_protocol(tmp_path: Path) -> None:
         assert status["webSocketClients"] == 0
 
 
-def test_missing_default_and_unknown_device_are_clear(tmp_path: Path) -> None:
+def test_unknown_device_is_clear(tmp_path: Path) -> None:
     with TestClient(app_for(tmp_path)) as client:
-        assert client.get("/api/status").status_code == 409
         assert client.get("/api/v1/devices/00000000-0000-0000-0000-000000000000").status_code == 404
+
+
+def test_removed_browser_and_legacy_routes_are_not_registered(tmp_path: Path) -> None:
+    paths = {path for route in app_for(tmp_path).routes if (path := getattr(route, "path", None))}
+    assert "/receiver" not in paths
+    assert "/ws/samples" not in paths
+    assert not paths.intersection(
+        {"/api/status", "/api/config", "/api/start", "/api/stop", "/api/latest"}
+    )

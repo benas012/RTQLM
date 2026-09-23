@@ -33,6 +33,23 @@ async def test_callback_copies_and_validates_two_channels() -> None:
 
 
 @pytest.mark.asyncio
+async def test_callback_accepts_version_3_client_and_pack_arguments() -> None:
+    frames = []
+    callback = create_callback(
+        ADCCallback,
+        asyncio.get_running_loop(),
+        Settings(_env_file=None),
+        frames.append,
+        lambda *_args: None,
+    )
+
+    callback.receivePack(object(), ADCPack(7))
+    await asyncio.sleep(0)
+
+    assert frames[0].source_pack_id == 7
+
+
+@pytest.mark.asyncio
 async def test_callback_rejects_mismatch_and_detects_packet_gap() -> None:
     frames = []
     events = []
@@ -93,8 +110,11 @@ async def test_vendor_rate_is_not_decimated_twice(decimation: int, reported_rate
 async def test_missing_vendor_rate_uses_configured_sample_rate() -> None:
     frames = []
     callback = create_callback(
-        ADCCallback, asyncio.get_running_loop(), Settings(_env_file=None, decimation=256),
-        frames.append, lambda *_args: None,
+        ADCCallback,
+        asyncio.get_running_loop(),
+        Settings(_env_file=None, decimation=256),
+        frames.append,
+        lambda *_args: None,
     )
     pack = ADCPack(1)
     del pack.channel1.baseRate
@@ -110,8 +130,11 @@ async def test_invalid_vendor_rate_is_rejected(rate: float) -> None:
     frames = []
     events = []
     callback = create_callback(
-        ADCCallback, asyncio.get_running_loop(), Settings(_env_file=None),
-        frames.append, lambda *args: events.append(args),
+        ADCCallback,
+        asyncio.get_running_loop(),
+        Settings(_env_file=None),
+        frames.append,
+        lambda *args: events.append(args),
     )
     pack = ADCPack(1)
     pack.channel1.baseRate = pack.channel2.baseRate = rate

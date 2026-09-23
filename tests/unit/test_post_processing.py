@@ -84,9 +84,7 @@ def test_mode_template_is_normalized_to_continuous_time() -> None:
 
 
 def test_shot_noise_coefficient_and_cluster_squeezing() -> None:
-    coefficient = shot_noise_cluster_coefficient(
-        [np.array([-1.0, 1.0]), np.array([-2.0, 2.0])]
-    )
+    coefficient = shot_noise_cluster_coefficient([np.array([-1.0, 1.0]), np.array([-2.0, 2.0])])
 
     assert coefficient == pytest.approx(1 / np.sqrt(5))
     np.testing.assert_allclose(cluster_squeezing_db(np.array([2.0])), [0.0])
@@ -96,8 +94,8 @@ def test_mode_carrier_uses_frequency_in_hertz() -> None:
     times = np.array([-0.1e-6, 0.0, 0.1e-6])
     mode = build_gauss_lin_cos_mode(1e-6, 1e6, times)
     angular_frequency = 2 * np.pi * 1e6
-    expected = times * np.cos(angular_frequency * times) * np.exp(
-        -0.5 * angular_frequency**2 * times**2
+    expected = (
+        times * np.cos(angular_frequency * times) * np.exp(-0.5 * angular_frequency**2 * times**2)
     )
     np.testing.assert_allclose(mode, expected)
 
@@ -159,9 +157,7 @@ def test_discontinuity_does_not_join_modes_across_a_gap() -> None:
     processor = RealtimeClusterProcessor(config)
     assert processor.feed(np.ones(3), np.ones(3), 1_000.0) is None
     after_gap = processor.feed(np.arange(5.0), np.arange(5.0), 1_000.0, discontinuity=True)
-    expected = RealtimeClusterProcessor(config).feed(
-        np.arange(5.0), np.arange(5.0), 1_000.0
-    )
+    expected = RealtimeClusterProcessor(config).feed(np.arange(5.0), np.arange(5.0), 1_000.0)
     assert after_gap is not None and expected is not None
     np.testing.assert_allclose(after_gap.quadratures["a"], expected.quadratures["a"])
 
@@ -211,16 +207,12 @@ def test_shot_noise_calibration_normalizes_each_channel_to_half_variance() -> No
     )
     processor = RealtimeClusterProcessor(config)
     processor.start_calibration()
-    calibration = processor.feed(
-        rng.standard_normal(40_000), rng.standard_normal(40_000), 1_000.0
-    )
+    calibration = processor.feed(rng.standard_normal(40_000), rng.standard_normal(40_000), 1_000.0)
     assert calibration is not None and calibration.calibrating
     coefficients = processor.finish_calibration()
     assert set(coefficients) == {"a", "b"}
 
-    result = processor.feed(
-        rng.standard_normal(40_000), rng.standard_normal(40_000), 1_000.0
-    )
+    result = processor.feed(rng.standard_normal(40_000), rng.standard_normal(40_000), 1_000.0)
     assert result is not None and result.calibrated
     assert np.var(result.quadratures["a"]) == pytest.approx(0.5, rel=0.06)
     assert np.var(result.quadratures["b"]) == pytest.approx(0.5, rel=0.06)

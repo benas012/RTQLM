@@ -41,8 +41,13 @@ def create_callback(
                 return
             loop.call_soon_threadsafe(on_frame, frame)
 
-        def receivePack(self, pack: Any) -> None:
-            self._receive(pack)
+        def receivePack(self, *args: Any) -> None:
+            # 2.07 wrappers call receivePack(pack); 3.00 calls
+            # receivePack(client, pack).
+            if not args:
+                loop.call_soon_threadsafe(on_event, "malformed", "missing ADC packet")
+                return
+            self._receive(args[-1])
 
         def recievePack(self, _client: Any, pack: Any) -> None:
             self._receive(pack)

@@ -28,10 +28,3 @@ frame metadata.
 Busy profile updates and connected deletion return 409. Unknown IDs return 404. Missing vendor streaming
 components return 503. Problem responses use `type`, `title`, `status`, `detail`, and, where applicable,
 `deviceId`. Validation errors use FastAPI's standard 422 response. Stack traces are never returned.
-
-## Temporary compatibility API
-
-`/api/status`, `/api/config`, `/api/start`, `/api/stop`, `/api/latest`, and `/ws/samples` map to the one
-profile marked `isDefault`. REST responses carry `X-QuantumLight-Deprecated: true`. They do not contain a
-second acquisition implementation and will be removed in a future API version.
-

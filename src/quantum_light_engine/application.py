@@ -4,12 +4,9 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
 
-from quantum_light_engine.api.compatibility_routes import router as compatibility_router
 from quantum_light_engine.api.device_routes import router as device_router
 from quantum_light_engine.api.engine_routes import router as engine_router
 from quantum_light_engine.api.errors import install_error_handlers
@@ -54,7 +51,6 @@ def create_app(settings: EngineSettings | None = None) -> FastAPI:
     install_error_handlers(app)
     app.include_router(engine_router)
     app.include_router(device_router)
-    app.include_router(compatibility_router)
     app.include_router(websocket_router)
 
     @app.get("/health/live")
@@ -64,10 +60,5 @@ def create_app(settings: EngineSettings | None = None) -> FastAPI:
     @app.get("/health/ready")
     async def ready() -> dict[str, str]:
         return {"status": "ready"}
-
-    @app.get("/receiver", response_class=HTMLResponse)
-    async def receiver() -> str:
-        path = Path.cwd() / "examples" / "live_receiver.html"
-        return path.read_text(encoding="utf-8")
 
     return app

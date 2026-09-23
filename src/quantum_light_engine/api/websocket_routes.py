@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -64,8 +65,6 @@ async def _watch_for_disconnect(websocket: WebSocket) -> None:
 
 @router.websocket("/ws/v1/devices/{device_id}/samples")
 async def device_samples(websocket: WebSocket, device_id: str) -> None:
-    from uuid import UUID
-
     try:
         parsed = UUID(device_id)
     except ValueError:
@@ -74,14 +73,5 @@ async def device_samples(websocket: WebSocket, device_id: str) -> None:
     session = websocket.app.state.session_manager.get(parsed)
     if session is None:
         await websocket.close(code=4404, reason="unknown device")
-        return
-    await stream_session(websocket, session)
-
-
-@router.websocket("/ws/samples")
-async def legacy_samples(websocket: WebSocket) -> None:
-    session = websocket.app.state.session_manager.default()
-    if session is None:
-        await websocket.close(code=4404, reason="no default device")
         return
     await stream_session(websocket, session)

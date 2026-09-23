@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Request, Response, status
 
-from quantum_light_engine.api.errors import not_found, state_conflict
+from quantum_light_engine.api.errors import EngineApiError, not_found, state_conflict
 from quantum_light_engine.devices.discovery import SavedProfileDiscovery
 from quantum_light_engine.devices.models import DeviceProfileCreate, DeviceProfileUpdate
 from quantum_light_engine.devices.session import DeviceSession
@@ -26,7 +26,7 @@ def _session(request: Request, device_id: UUID) -> DeviceSession:
     return session
 
 
-def _combined(session: DeviceSession) -> dict[str, Any]:
+def _device_response(session: DeviceSession) -> dict[str, Any]:
     return {
         **session.profile.model_dump(mode="json", by_alias=True),
         "runtime": session.status(),
@@ -35,13 +35,13 @@ def _combined(session: DeviceSession) -> dict[str, Any]:
 
 @router.get("")
 async def list_devices(request: Request) -> list[dict[str, Any]]:
-    return [_combined(session) for session in _manager(request).sessions()]
+    return [_device_response(session) for session in _manager(request).sessions()]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_device(request: Request, profile: DeviceProfileCreate) -> dict[str, Any]:
     try:
-        return _combined(await _manager(request).create(profile))
+        return _device_response(await _manager(request).create(profile))
     except ValueError as exc:
         raise state_conflict(UUID(int=0), str(exc)) from exc
 
@@ -56,7 +56,7 @@ async def discover_devices(request: Request, timeout_seconds: float = 1.0) -> li
 
 @router.get("/{device_id}")
 async def get_device(request: Request, device_id: UUID) -> dict[str, Any]:
-    return _combined(_session(request, device_id))
+    return _device_response(_session(request, device_id))
 
 
 @router.put("/{device_id}")
@@ -64,7 +64,7 @@ async def update_device(
     request: Request, device_id: UUID, profile: DeviceProfileUpdate
 ) -> dict[str, Any]:
     try:
-        return _combined(await _manager(request).update(device_id, profile))
+        return _device_response(await _manager(request).update(device_id, profile))
     except KeyError as exc:
         raise not_found(device_id) from exc
     except (RuntimeError, ValueError) as exc:
@@ -91,8 +91,6 @@ async def _lifecycle(request: Request, device_id: UUID, operation: str) -> dict[
         lifecycle_conflict = isinstance(exc, RuntimeError) and "current state" in str(exc).lower()
         code = 409 if lifecycle_conflict else 503
         if code == 503:
-            from quantum_light_engine.api.errors import EngineApiError
-
             raise EngineApiError(
                 "streaming-component-unavailable",
                 "Streaming component unavailable",
@@ -132,8 +130,6 @@ async def device_status(request: Request, device_id: UUID) -> dict[str, Any]:
 async def latest(request: Request, device_id: UUID) -> dict[str, Any]:
     metadata = _session(request, device_id).manager.latest_metadata()
     if metadata is None:
-        from quantum_light_engine.api.errors import EngineApiError
-
         raise EngineApiError(
             "frame-not-available",
             "No frame available",

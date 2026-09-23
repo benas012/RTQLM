@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 POST_RESTART_CONNECT_TIMEOUT_SECONDS = 30.0
 POST_RESTART_CONNECT_INTERVAL_SECONDS = 1.0
 STREAMING_APP_RESTART_ATTEMPTS = 3
+VERSION_3_CONFIG_PORT = 18_901
+STREAMING_PORT_PROBE_TIMEOUT_SECONDS = 0.5
 
 
 class RedPitayaStreamingSource(AcquisitionSource):
@@ -29,6 +32,7 @@ class RedPitayaStreamingSource(AcquisitionSource):
         self._settings = settings
         self._library: LoadedStreamingLibrary | None = None
         self._client: Any = None
+        self._config_client: Any = None
         self._adapter: StreamingCompatibility | None = None
         self._callback: Any = None
         self._queue: asyncio.Queue[RawSampleFrame | BaseException] = asyncio.Queue(
@@ -70,6 +74,20 @@ class RedPitayaStreamingSource(AcquisitionSource):
 
     async def _connect_native_client(self, host: str) -> None:
         """Connect without disrupting an already-running board-side stream service."""
+
+        if self._uses_version_3_client() and not await asyncio.to_thread(
+            _streaming_service_ready, host
+        ):
+            if not self._settings.auto_start_streaming_app:
+                raise ConnectionError(
+                    f"Red Pitaya 3.00 streaming service is not listening on '{host}'"
+                )
+            logger.info(
+                "Red Pitaya streaming service unavailable; starting the board application",
+                extra={"host": self._settings.host},
+            )
+            await self._restart_streaming_app_until_connected(host)
+            return
 
         self._prepare_native_client()
         assert self._adapter is not None
@@ -130,6 +148,16 @@ class RedPitayaStreamingSource(AcquisitionSource):
         deadline = time.monotonic() + POST_RESTART_CONNECT_TIMEOUT_SECONDS
         last_error: BaseException | None = None
         while True:
+            if self._uses_version_3_client() and not await asyncio.to_thread(
+                _streaming_service_ready, host
+            ):
+                if time.monotonic() >= deadline:
+                    raise ConnectionError(
+                        f"Red Pitaya 3.00 streaming service did not open configuration port "
+                        f"{VERSION_3_CONFIG_PORT} on '{host}'"
+                    )
+                await asyncio.sleep(POST_RESTART_CONNECT_INTERVAL_SECONDS)
+                continue
             self._prepare_native_client()
             assert self._adapter is not None
             try:
@@ -142,13 +170,23 @@ class RedPitayaStreamingSource(AcquisitionSource):
                     raise last_error from exc
                 await asyncio.sleep(POST_RESTART_CONNECT_INTERVAL_SECONDS)
 
+    def _uses_version_3_client(self) -> bool:
+        return self._library is not None and hasattr(self._library.module, "ConfigStreamClient")
+
     def _prepare_native_client(self) -> None:
         assert self._library is not None
-        self._client = self._library.module.ADCStreamClient()
-        self._adapter = StreamingCompatibility(self._client)
+        module = self._library.module
+        config_client_type = getattr(module, "ConfigStreamClient", None)
+        if config_client_type is not None:
+            self._config_client = config_client_type()
+            self._client = module.ADCStreamClient(self._config_client)
+        else:
+            self._config_client = None
+            self._client = module.ADCStreamClient()
+        self._adapter = StreamingCompatibility(self._client, self._config_client)
         loop = asyncio.get_running_loop()
         self._callback = create_callback(
-            self._library.module.ADCCallback, loop, self._settings, self._enqueue, self._event
+            module.ADCCallback, loop, self._settings, self._enqueue, self._event
         )
 
     async def start(self) -> None:
@@ -179,6 +217,7 @@ class RedPitayaStreamingSource(AcquisitionSource):
             await asyncio.to_thread(self._adapter.disconnect)
         self._adapter = None
         self._client = None
+        self._config_client = None
         self._callback = None
 
     async def frames(self) -> AsyncIterator[RawSampleFrame]:
@@ -224,3 +263,21 @@ class RedPitayaStreamingSource(AcquisitionSource):
             self._queue.get_nowait()
             self._queue.task_done()
         self._queue.put_nowait(error)
+
+
+def _streaming_service_ready(host: str) -> bool:
+    """Avoid entering the 3.00 native client until its configuration service is listening.
+
+    The vendor library terminates the whole process on some refused connections,
+    so this Python-level probe is a required crash guard rather than only a
+    readiness optimization. The ADC data port must not be probed: its server
+    treats a bare TCP connection as a real stream and stops when it closes.
+    """
+
+    try:
+        with socket.create_connection(
+            (host, VERSION_3_CONFIG_PORT), timeout=STREAMING_PORT_PROBE_TIMEOUT_SECONDS
+        ):
+            return True
+    except OSError:
+        return False

@@ -38,6 +38,109 @@ async def test_connect_keeps_an_available_streaming_app_running(
 
 
 @pytest.mark.asyncio
+async def test_connect_uses_version_3_split_clients(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[object, ...]] = []
+
+    monkeypatch.setattr(streaming_source_module, "_streaming_service_ready", lambda _host: True)
+
+    class Callback:
+        pass
+
+    class ConfigClient:
+        def connect(self, hosts: list[str]) -> bool:
+            calls.append(("connect", hosts))
+            return True
+
+        def sendConfig(self, host: str, key: str, value: str) -> bool:
+            calls.append(("config", host, key, value))
+            return True
+
+        def setVerbose(self, enabled: bool) -> None:
+            calls.append(("config-verbose", enabled))
+
+    class Client:
+        def __init__(self, config_client: ConfigClient) -> None:
+            calls.append(("construct", config_client))
+
+        def setCallback(self, callback: Callback) -> bool:
+            calls.append(("callback", callback))
+            return True
+
+        def setVerbose(self, enabled: bool) -> None:
+            calls.append(("adc-verbose", enabled))
+
+    module = ModuleType("test_streaming_module_v3")
+    module.ConfigStreamClient = ConfigClient  # type: ignore[attr-defined]
+    module.ADCStreamClient = Client  # type: ignore[attr-defined]
+    module.ADCCallback = Callback  # type: ignore[attr-defined]
+    loaded = LoadedStreamingLibrary(module=module, name=module.__name__, path=None)
+    monkeypatch.setattr(streaming_source_module, "load_streaming_library", lambda _name: loaded)
+    source = RedPitayaStreamingSource(
+        Settings(_env_file=None, source="redpitaya", host="rp-test.local")
+    )
+
+    await source.connect()
+
+    assert calls[0][0] == "construct"
+    assert ("connect", ["rp-test.local"]) in calls
+    assert any(call[0] == "callback" for call in calls)
+    await source.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_version_3_starts_board_app_before_entering_native_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[object, ...]] = []
+    readiness = iter((False, True))
+
+    class Callback:
+        pass
+
+    class ConfigClient:
+        def connect(self, hosts: list[str]) -> bool:
+            calls.append(("connect", hosts))
+            return True
+
+        def sendConfig(self, host: str, key: str, value: str) -> bool:
+            return True
+
+    class Client:
+        def __init__(self, _config_client: ConfigClient) -> None:
+            calls.append(("construct",))
+
+        def setCallback(self, _callback: Callback) -> bool:
+            return True
+
+    module = ModuleType("test_streaming_module_v3")
+    module.ConfigStreamClient = ConfigClient  # type: ignore[attr-defined]
+    module.ADCStreamClient = Client  # type: ignore[attr-defined]
+    module.ADCCallback = Callback  # type: ignore[attr-defined]
+    loaded = LoadedStreamingLibrary(module=module, name=module.__name__, path=None)
+    monkeypatch.setattr(streaming_source_module, "load_streaming_library", lambda _name: loaded)
+    monkeypatch.setattr(
+        streaming_source_module,
+        "_streaming_service_ready",
+        lambda _host: next(readiness),
+    )
+    monkeypatch.setattr(
+        streaming_source_module,
+        "request_streaming_app_start",
+        lambda host, delay: calls.append(("start-app", host, delay)),
+    )
+    source = RedPitayaStreamingSource(
+        Settings(_env_file=None, source="redpitaya", host="rp-test.local")
+    )
+
+    await source.connect()
+
+    assert calls[0][0] == "start-app"
+    assert calls[1][0] == "construct"
+    assert calls[2] == ("connect", ["rp-test.local"])
+    await source.disconnect()
+
+
+@pytest.mark.asyncio
 async def test_connect_restarts_the_app_only_after_native_probe_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

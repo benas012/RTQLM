@@ -19,11 +19,7 @@ def test_installed_windows_client_path_is_discovered(monkeypatch, tmp_path) -> N
     python_lib = tmp_path / "RedPitaya" / "rpsa-client-2.07-48" / "python_lib"
     python_lib.mkdir(parents=True)
     (python_lib / "streaming.py").write_text(
-        "class ADCStreamClient:\n"
-        "    pass\n"
-        "\n"
-        "class ADCCallback:\n"
-        "    pass\n",
+        "class ADCStreamClient:\n    pass\n\nclass ADCCallback:\n    pass\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
@@ -33,3 +29,17 @@ def test_installed_windows_client_path_is_discovered(monkeypatch, tmp_path) -> N
 
     assert loaded.name == "streaming"
     assert loaded.path == str(python_lib / "streaming.py")
+
+
+def test_newest_installed_windows_client_is_preferred(monkeypatch, tmp_path) -> None:
+    old_lib = tmp_path / "RedPitaya" / "rpsa-client-2.07-48" / "python_lib"
+    new_lib = tmp_path / "RedPitaya" / "rpsa-client-3.00" / "python_lib"
+    old_lib.mkdir(parents=True)
+    new_lib.mkdir(parents=True)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+
+    from redpitaya_acquisition.redpitaya import library_loader
+
+    candidates = library_loader._installed_client_candidates()
+
+    assert candidates == [new_lib, old_lib]

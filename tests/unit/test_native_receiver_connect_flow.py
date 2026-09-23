@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from examples import native_receiver as nr
+from apps.native_receiver import native_receiver as nr
 
 
 class Value:

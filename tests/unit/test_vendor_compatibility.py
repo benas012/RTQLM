@@ -66,3 +66,48 @@ def test_single_board_wrapper_surface_after_type_error_fallback() -> None:
     assert client.hosts == ["auto"]
     assert client.callback is callback
     assert ("single-board", "adc_decimation", "256") in client.config
+
+
+def test_version_3_split_config_and_adc_clients() -> None:
+    calls: list[tuple[Any, ...]] = []
+
+    class Callback:
+        def __disown__(self) -> object:
+            calls.append(("disown",))
+            return object()
+
+    class ConfigClient:
+        def connect(self, hosts: list[str]) -> bool:
+            calls.append(("connect", hosts))
+            return True
+
+        def sendConfig(self, host: str, key: str, value: str) -> bool:
+            calls.append(("config", host, key, value))
+            return True
+
+        def setVerbose(self, enabled: bool) -> None:
+            calls.append(("config-verbose", enabled))
+
+    class ADCClient:
+        def setCallback(self, callback: Any) -> bool:
+            calls.append(("callback", callback))
+            return True
+
+        def setVerbose(self, enabled: bool) -> None:
+            calls.append(("adc-verbose", enabled))
+
+    callback = Callback()
+    config_client = ConfigClient()
+    adapter = StreamingCompatibility(ADCClient(), config_client)
+
+    adapter.connect("192.0.2.10")
+    adapter.register_callback(callback)
+    adapter.configure(Settings(_env_file=None))
+    adapter.set_verbose(True)
+
+    assert ("connect", ["192.0.2.10"]) in calls
+    assert ("callback", callback) in calls
+    assert ("disown",) not in calls
+    assert ("config", "192.0.2.10", "adc_decimation", "256") in calls
+    assert ("config-verbose", True) in calls
+    assert ("adc-verbose", True) in calls

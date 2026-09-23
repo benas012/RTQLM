@@ -10,17 +10,18 @@ from redpitaya_acquisition.config.settings import Settings
 class StreamingCompatibility:
     """The only place where vendor wrapper API variations are handled."""
 
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: Any, config_client: Any | None = None) -> None:
         self.client = client
+        self.config_client = config_client if config_client is not None else client
         self.host: str | None = None
         self._host_specific_config = False
 
     def connect(self, host: str) -> None:
         self.host = host
         try:
-            result = self.client.connect([host])
+            result = self.config_client.connect([host])
         except TypeError:
-            result = self.client.connect()
+            result = self.config_client.connect()
             self._host_specific_config = False
         else:
             self._host_specific_config = True
@@ -34,20 +35,25 @@ class StreamingCompatibility:
         )
 
     def register_callback(self, callback: Any) -> None:
-        owned = callback.__disown__() if hasattr(callback, "__disown__") else callback
         if hasattr(self.client, "setReceiveDataCallback"):
-            result = self.client.setReceiveDataCallback(owned)
+            result = self.client.setReceiveDataCallback(self._legacy_callback(callback))
         elif hasattr(self.client, "setReceiveDataFunction"):
-            result = self.client.setReceiveDataFunction(owned)
+            result = self.client.setReceiveDataFunction(self._legacy_callback(callback))
         elif hasattr(self.client, "setReciveDataFunction"):
-            result = self.client.setReciveDataFunction(owned)
+            result = self.client.setReciveDataFunction(self._legacy_callback(callback))
         elif hasattr(self.client, "setCallback"):
-            result = self.client.setCallback(owned)
+            # The 3.00 wrapper retains the Python callback itself. Disowning it,
+            # as required by the legacy wrapper, can leave a dangling callback.
+            result = self.client.setCallback(callback)
         else:
             raise NonRecoverableAcquisitionError(
                 "streaming client has no supported callback registration method"
             )
         self._require_success("callback registration", result)
+
+    @staticmethod
+    def _legacy_callback(callback: Any) -> Any:
+        return callback.__disown__() if hasattr(callback, "__disown__") else callback
 
     def configure(self, settings: Settings) -> None:
         values: tuple[tuple[str, Any, tuple[str, ...]], ...] = (
@@ -58,18 +64,18 @@ class StreamingCompatibility:
             ("block_size", settings.block_size_bytes, ("setBlockSize",)),
             ("adc_size", settings.adc_buffer_size_bytes, ("setADCBufferSize", "setADCSize")),
         )
-        if hasattr(self.client, "sendConfig"):
+        if hasattr(self.config_client, "sendConfig"):
             for key, value, _ in values:
                 serialized = str(value)
                 if self._host_specific_config and self.host is not None:
-                    result = self.client.sendConfig(self.host, key, serialized)
+                    result = self.config_client.sendConfig(self.host, key, serialized)
                 else:
-                    result = self.client.sendConfig(key, serialized)
+                    result = self.config_client.sendConfig(key, serialized)
                 self._require_success(key, result)
             return
-        if hasattr(self.client, "setConfig"):
+        if hasattr(self.config_client, "setConfig"):
             for key, value, _ in values:
-                self._require_success(key, self.client.setConfig(key, value))
+                self._require_success(key, self.config_client.setConfig(key, value))
             return
         for key, value, method_names in values:
             method = self._first_method(method_names)
@@ -78,6 +84,8 @@ class StreamingCompatibility:
     def set_verbose(self, enabled: bool) -> None:
         if hasattr(self.client, "setVerbose"):
             self.client.setVerbose(enabled)
+        if self.config_client is not self.client and hasattr(self.config_client, "setVerbose"):
+            self.config_client.setVerbose(enabled)
 
     def start(self) -> None:
         self._require_success("startStreaming", self.client.startStreaming())
@@ -91,6 +99,8 @@ class StreamingCompatibility:
     def disconnect(self) -> None:
         if hasattr(self.client, "disconnect"):
             self.client.disconnect()
+        if self.config_client is not self.client and hasattr(self.config_client, "disconnect"):
+            self.config_client.disconnect()
 
     def wait(self) -> None:
         self.client.wait()

@@ -33,6 +33,7 @@ def request_streaming_app_start(host: str, startup_delay_seconds: float) -> None
     if startup_delay_seconds:
         time.sleep(startup_delay_seconds)
 
+
 def request_legacy_streaming_app_start(host: str) -> None:
     command = """
 export LD_LIBRARY_PATH=/opt/redpitaya/lib

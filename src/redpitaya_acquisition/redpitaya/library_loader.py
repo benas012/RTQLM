@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -63,8 +64,15 @@ def _installed_client_candidates() -> list[Path]:
         return []
     return sorted(
         (path / "python_lib" for path in redpitaya_root.glob("rpsa-client-*")),
-        key=lambda path: path.stat().st_mtime if path.exists() else 0,
+        key=lambda path: _client_version(path.parent.name),
+        reverse=True,
     )
+
+
+def _client_version(directory_name: str) -> tuple[int, ...]:
+    """Return a naturally sortable version from an rpsa-client directory name."""
+
+    return tuple(int(part) for part in re.findall(r"\d+", directory_name))
 
 
 def _prepend_library_paths(candidates: list[Path]) -> None:

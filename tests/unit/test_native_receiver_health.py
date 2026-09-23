@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from examples import native_receiver as nr
+from apps.native_receiver import native_receiver as nr
 
 
 def test_engine_health_check_reads_the_response_before_closing(

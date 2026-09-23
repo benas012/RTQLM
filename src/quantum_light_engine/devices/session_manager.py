@@ -7,7 +7,7 @@ from uuid import UUID
 from quantum_light_engine.config.settings import EngineSettings
 from redpitaya_acquisition.redpitaya.host import streaming_host
 
-from .models import DeviceProfile, DeviceProfileCreate, DeviceProfileUpdate, DeviceSource
+from .models import DeviceProfileCreate, DeviceProfileUpdate, DeviceSource
 from .persistence import DeviceProfileRepository
 from .session import BUSY_SESSION_STATES, DeviceSession, DeviceSessionState
 
@@ -36,11 +36,6 @@ class DeviceSessionManager:
         if session is None:
             raise KeyError(device_id)
         return session
-
-    def default(self) -> DeviceSession | None:
-        return next(
-            (session for session in self._sessions.values() if session.profile.is_default), None
-        )
 
     async def create(self, request: DeviceProfileCreate) -> DeviceSession:
         self._ensure_accepting()
@@ -100,9 +95,6 @@ class DeviceSessionManager:
         finally:
             for session in self._sessions.values():
                 session.broadcaster.close()
-
-    def replace_profile(self, profile: DeviceProfile) -> None:
-        self._sessions[profile.id] = DeviceSession(profile, self.settings)
 
     def _ensure_accepting(self) -> None:
         if not self._accepting_operations:

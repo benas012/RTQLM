@@ -7,13 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from examples import native_receiver as nr
+from apps.native_receiver import native_receiver as nr
 from tests.unit.test_native_receiver_connect_flow import Value
 
 
-@pytest.mark.parametrize(
-    ("work_ms", "delay_ms"), [(0, 16), (2, 14), (10, 6), (16, 1), (50, 1)]
-)
+@pytest.mark.parametrize(("work_ms", "delay_ms"), [(0, 16), (2, 14), (10, 6), (16, 1), (50, 1)])
 def test_refresh_budget_accounts_for_drawing_time(work_ms: int, delay_ms: int) -> None:
     assert nr.next_frame_delay_ms(1_000_000_000, 1_000_000_000 + work_ms * 1_000_000) == delay_ms
 
@@ -117,11 +115,11 @@ def test_socket_failure_releases_display_timer(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_auto_display_slows_as_the_view_widens() -> None:
-    intervals = [nr.display_interval_ms("Auto", zoom) for zoom in (1, 1/4, 1/64, 1/4096)]
+    intervals = [nr.display_interval_ms("Auto", zoom) for zoom in (1, 1 / 4, 1 / 64, 1 / 4096)]
     assert intervals == [16, 32, 128, 1000]
-    assert nr.display_interval_ms("Auto", 1/4096, visible_seconds=7.999) == 1000
-    assert nr.display_interval_ms("Auto", 1/4096, visible_seconds=8.0) == 500
-    assert nr.display_interval_ms("Live", 1/4096) == 16
+    assert nr.display_interval_ms("Auto", 1 / 4096, visible_seconds=7.999) == 1000
+    assert nr.display_interval_ms("Auto", 1 / 4096, visible_seconds=8.0) == 500
+    assert nr.display_interval_ms("Live", 1 / 4096) == 16
     assert nr.display_interval_ms("Slow", 1) == 500
 
 

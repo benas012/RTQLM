@@ -5,7 +5,7 @@ import asyncio
 import numpy as np
 import pytest
 
-from examples.native_receiver import compute_spectrum, parse_frame
+from apps.native_receiver.native_receiver import compute_spectrum, parse_frame
 from redpitaya_acquisition.config.settings import Settings
 from redpitaya_acquisition.redpitaya.callback import create_callback
 from redpitaya_acquisition.streaming.binary_protocol import serialize_frame
@@ -15,8 +15,11 @@ from tests.fakes.fake_rp_stream import ADCCallback, ADCPack
 async def test_vendor_rate_reaches_receiver_time_and_frequency_axes() -> None:
     frames = []
     callback = create_callback(
-        ADCCallback, asyncio.get_running_loop(), Settings(_env_file=None, decimation=256),
-        frames.append, lambda *_args: None,
+        ADCCallback,
+        asyncio.get_running_loop(),
+        Settings(_env_file=None, decimation=256),
+        frames.append,
+        lambda *_args: None,
     )
     rate = 488_281
     count = 4096
@@ -29,9 +32,7 @@ async def test_vendor_rate_reaches_receiver_time_and_frequency_axes() -> None:
     await asyncio.sleep(0)
     received = parse_frame(serialize_frame(frames[0]))
     assert received.sample_rate_hz == rate
-    assert received.samples_per_channel / received.sample_rate_hz * 1000 == pytest.approx(
-        8.3886123
-    )
+    assert received.samples_per_channel / received.sample_rate_hz * 1000 == pytest.approx(8.3886123)
     # A 64-batch history is about half a second, not 137 seconds.
     assert 64 * count / received.sample_rate_hz * 1000 == pytest.approx(536.8711869)
     spectrum = compute_spectrum(received.channel_1, received.sample_rate_hz, count)
