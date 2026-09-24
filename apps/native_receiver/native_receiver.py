@@ -65,6 +65,9 @@ SIGNAL_RESOLUTION_POINTS = {
 }
 SIGNAL_PLOT_TOP_PAD = 14
 ADC_COUNTS_PER_VOLT = 32_768.0
+TRIGGER_PRE_SAMPLES_FRACTION = 0.25
+TEST_SINE_FREQUENCY_HZ = 1_000
+TEST_SINE_AMPLITUDE_VOLTS = 0.2
 UI_FRAME_INTERVAL_MS = 16
 WIDE_VIEW_FAST_REFRESH_SECONDS = 8.0
 WIDE_VIEW_AUTO_INTERVAL_MS = 500
@@ -576,8 +579,18 @@ class ReceiverApp(tk.Tk):
         self.paused_history: SampleHistory | None = None
         self.pending_time_span_choice = True
         self.signal_padding_samples = 0
+        self.signal_window_samples = 0
         self.last_display_monotonic_ns = 0
         self.cursor_status = tk.StringVar(value="Cursor off")
+        self.trigger_enabled = tk.BooleanVar(value=False)
+        self.trigger_channel = tk.StringVar(value="CH1")
+        self.trigger_edge = tk.StringVar(value="Rising")
+        self.trigger_level = tk.StringVar(value="0.0")
+        self.trigger_status = tk.StringVar(value="Trigger off")
+        self.trigger_capture_valid = False
+        self.test_output_label = tk.StringVar(value="OUT1 sine")
+        self.test_output_enabled = False
+        self.test_output_device_id: str | None = None
         self.y_axis_range_label = tk.StringVar(value="Y range ±1.00 V")
         self.channel_1_visible = tk.BooleanVar(value=True)
         self.channel_2_visible = tk.BooleanVar(value=True)
@@ -625,6 +638,7 @@ class ReceiverApp(tk.Tk):
         self.y_axis_dirty = False
         self.axis_sample_rate_hz = 0.0
         self.axis_samples_per_channel = 0
+        self.axis_trigger_offset_samples: int | None = None
         self.time_zoom = 1.0
         self.time_pan = 0.0
         self.cursor_enabled = False
@@ -1473,6 +1487,69 @@ class ReceiverApp(tk.Tk):
             style="Toolbar.TLabel",
             width=22,
         ).pack(side="left")
+
+        self.trigger_control_group = ttk.Frame(self.signal_controls, style="ControlGroup.TFrame")
+        ttk.Label(self.trigger_control_group, text="TRIGGER", style="GroupLabel.TLabel").pack(
+            side="left", padx=(0, 8)
+        )
+        ttk.Checkbutton(
+            self.trigger_control_group,
+            text="On",
+            variable=self.trigger_enabled,
+            command=self.apply_trigger_settings,
+            style="Toolbar.TCheckbutton",
+        ).pack(side="left", padx=(0, 7))
+        trigger_channel_box = ttk.Combobox(
+            self.trigger_control_group,
+            textvariable=self.trigger_channel,
+            values=("CH1", "CH2"),
+            state="readonly",
+            width=5,
+        )
+        trigger_channel_box.pack(side="left", padx=(0, 6))
+        trigger_edge_box = ttk.Combobox(
+            self.trigger_control_group,
+            textvariable=self.trigger_edge,
+            values=("Rising", "Falling"),
+            state="readonly",
+            width=8,
+        )
+        trigger_edge_box.pack(side="left", padx=(0, 6))
+        ttk.Label(self.trigger_control_group, text="Level", style="Toolbar.TLabel").pack(
+            side="left"
+        )
+        trigger_level_entry = ttk.Entry(
+            self.trigger_control_group, textvariable=self.trigger_level, width=8
+        )
+        trigger_level_entry.pack(side="left", padx=(5, 3))
+        ttk.Label(self.trigger_control_group, text="V", style="Toolbar.TLabel").pack(
+            side="left", padx=(0, 6)
+        )
+        ttk.Button(
+            self.trigger_control_group,
+            text="Apply",
+            style="Compact.TButton",
+            command=self.apply_trigger_settings,
+        ).pack(side="left", padx=(0, 8))
+        self.test_output_button = ttk.Button(
+            self.trigger_control_group,
+            textvariable=self.test_output_label,
+            style="Compact.TButton",
+            command=self.toggle_test_output,
+        )
+        self.test_output_button.pack(side="left", padx=(0, 8))
+        ttk.Label(
+            self.trigger_control_group,
+            textvariable=self.trigger_status,
+            style="Toolbar.TLabel",
+            width=27,
+        ).pack(side="left")
+        trigger_channel_box.bind(
+            "<<ComboboxSelected>>", lambda _event: self.apply_trigger_settings()
+        )
+        trigger_edge_box.bind("<<ComboboxSelected>>", lambda _event: self.apply_trigger_settings())
+        trigger_level_entry.bind("<Return>", lambda _event: self.apply_trigger_settings())
+        trigger_level_entry.bind("<FocusOut>", lambda _event: self.apply_trigger_settings())
         self.waveform_more_button = ttk.Button(
             self.signal_controls,
             text="Vertical & channel controls ▾",
@@ -1632,6 +1709,7 @@ class ReceiverApp(tk.Tk):
             self.vertical_control_group,
             self.channel_control_group,
             self.display_control_group,
+            self.trigger_control_group,
         )
         for group in groups:
             group.grid_forget()
@@ -1639,18 +1717,20 @@ class ReceiverApp(tk.Tk):
         if layout == "wide":
             self.time_control_group.grid(row=0, column=0, sticky="w", padx=(0, 12))
             self.vertical_control_group.grid(row=0, column=1, sticky="e")
-            self.channel_control_group.grid(row=1, column=0, columnspan=2, sticky="w", pady=(7, 0))
+            self.channel_control_group.grid(row=1, column=0, sticky="w", pady=(7, 0))
+            self.trigger_control_group.grid(row=1, column=1, sticky="e", pady=(7, 0))
             self.display_control_group.grid(row=2, column=0, columnspan=2, sticky="w", pady=(7, 0))
         else:
             self.time_control_group.grid(row=0, column=0, columnspan=2, sticky="w")
             self.display_control_group.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
-            self.waveform_more_button.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+            self.trigger_control_group.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+            self.waveform_more_button.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
             if expanded:
                 self.vertical_control_group.grid(
-                    row=3, column=0, columnspan=2, sticky="w", pady=(6, 0)
+                    row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
                 )
                 self.channel_control_group.grid(
-                    row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
+                    row=5, column=0, columnspan=2, sticky="w", pady=(6, 0)
                 )
         show_spectrum_advanced = layout == "wide"
         for widget in (
@@ -2168,6 +2248,97 @@ class ReceiverApp(tk.Tk):
         self._update_time_controls()
         self._redraw_latest_signal()
 
+    def apply_trigger_settings(self) -> None:
+        self.trigger_capture_valid = False
+        if not self.trigger_enabled.get():
+            set_if_changed(self.trigger_status, "Trigger off")
+            self.status.set("voltage trigger disabled")
+            self._redraw_latest_signal()
+            return
+        try:
+            level = float(self.trigger_level.get().strip())
+        except ValueError:
+            set_if_changed(self.trigger_status, "Enter a numeric voltage")
+            return
+        if not np.isfinite(level):
+            set_if_changed(self.trigger_status, "Enter a finite voltage")
+            return
+        edge_symbol = "↑" if self.trigger_edge.get() == "Rising" else "↓"
+        set_if_changed(
+            self.trigger_status,
+            f"Armed {self.trigger_channel.get()} {edge_symbol} {format_voltage(level)}",
+        )
+        self.status.set("voltage trigger armed")
+        self._ui_log(
+            "voltage trigger changed",
+            channel=self.trigger_channel.get(),
+            edge=self.trigger_edge.get().lower(),
+            level_volts=level,
+        )
+        self._redraw_latest_signal()
+
+    def toggle_test_output(self) -> None:
+        enable = not self.test_output_enabled
+        device = self.selected_device
+        if enable:
+            if device is None:
+                messagebox.showerror("No Red Pitaya", "Select a Red Pitaya first.")
+                return
+            target_device_id = device.id
+        else:
+            target_device_id = self.test_output_device_id or (
+                device.id if device is not None else ""
+            )
+            if not target_device_id:
+                self._set_test_output_ui(False)
+                return
+        action = "Starting" if enable else "Stopping"
+        self.status.set(f"{action.lower()} OUT1 test sine")
+        api_base = self._api_base()
+
+        def work() -> dict[str, Any]:
+            result = self._api_for_base(
+                api_base,
+                "POST",
+                f"/api/v1/devices/{target_device_id}/outputs/1/test-sine",
+                {"enabled": enable},
+            )
+            if not isinstance(result, dict):
+                raise ApiError("The acquisition engine returned an invalid OUT1 response.")
+            return result
+
+        def apply(result: dict[str, Any]) -> None:
+            enabled = bool(result.get("enabled"))
+            self._set_test_output_ui(
+                enabled,
+                target_device_id if enabled else None,
+            )
+            if enabled:
+                frequency_hz = float(result.get("frequencyHz", TEST_SINE_FREQUENCY_HZ))
+                amplitude_volts = float(result.get("amplitudeVolts", TEST_SINE_AMPLITUDE_VOLTS))
+                self.status.set(
+                    f"OUT1 test: {format_frequency(frequency_hz)}, "
+                    f"{format_voltage(amplitude_volts)} sine"
+                )
+            else:
+                self.status.set("OUT1 test output stopped")
+            self._ui_log(
+                "OUT1 test output changed through engine",
+                enabled=enabled,
+                device_id=target_device_id,
+            )
+
+        self._run_busy(f"{action} OUT1 test sine", work, apply)
+
+    def _set_test_output_ui(self, enabled: bool, device_id: str | None = None) -> None:
+        self.test_output_enabled = enabled
+        self.test_output_device_id = device_id if enabled else None
+        self.test_output_label.set("Stop OUT1" if enabled else "OUT1 sine")
+        if "test_output_button" in self.__dict__:
+            self.test_output_button.configure(
+                style="Active.TButton" if enabled else "Compact.TButton"
+            )
+
     def nudge_channel_offset(self, channel: int, divisions: float) -> None:
         variable = (
             self.channel_1_offset_divisions if channel == 1 else self.channel_2_offset_divisions
@@ -2227,6 +2398,21 @@ class ReceiverApp(tk.Tk):
     def _channels_for_signal(self, frame: SampleFrame) -> tuple[Any, Any, float, int]:
         self.signal_padding_samples = 0
         requested = min(HISTORY_MAX_SAMPLES, int(frame.samples_per_channel / self.time_zoom))
+        self.signal_window_samples = requested
+        trigger_variable = self.__dict__.get("trigger_enabled")
+        trigger_active = trigger_variable is not None and trigger_variable.get()
+        if trigger_active and not self._signal_script_active():
+            search_samples = min(
+                HISTORY_MAX_SAMPLES,
+                requested + frame.samples_per_channel,
+            )
+            with self.frame_lock:
+                channels = self._view_history().plot_channels(
+                    search_samples,
+                    self._signal_plot_points(),
+                )
+            if channels is not None and channels[3] >= requested:
+                return channels
         if self.time_zoom < 1.0 and not self._signal_script_active():
             with self.frame_lock:
                 channels = self._view_history().plot_channels(requested, self._signal_plot_points())
@@ -2281,6 +2467,93 @@ class ReceiverApp(tk.Tk):
             return samples
         start, end = self._window_bounds(len(samples))
         return samples[start:end]
+
+    def _window_channel_for_bounds(
+        self,
+        samples: Any,
+        start_index: int,
+        end_index: int,
+        total_samples: int,
+    ) -> Any:
+        """Slice raw or display-decimated data using capture-relative bounds."""
+        if samples is None or len(samples) < 2:
+            return samples
+        padding = min(max(self.signal_padding_samples, 0), total_samples)
+        data_span = max(total_samples - padding, 0)
+        overlap_start = max(start_index, padding)
+        overlap_end = min(end_index, total_samples)
+        if data_span <= 0 or overlap_end <= overlap_start:
+            return samples[0:0]
+        if len(samples) == data_span:
+            return samples[overlap_start - padding : overlap_end - padding]
+        source_start = int((overlap_start - padding) * len(samples) / data_span)
+        source_end = int(np.ceil((overlap_end - padding) * len(samples) / data_span))
+        source_start = min(max(source_start, 0), len(samples) - 1)
+        source_end = min(max(source_end, source_start + 1), len(samples))
+        return samples[source_start:source_end]
+
+    def _trigger_window_bounds(
+        self,
+        channel_1: Any,
+        channel_2: Any,
+        sample_count: int,
+    ) -> tuple[int, int, int | None]:
+        nominal_start, nominal_end = self._window_bounds(sample_count)
+        if not self.trigger_enabled.get():
+            return nominal_start, nominal_end, None
+        try:
+            level = float(self.trigger_level.get().strip())
+        except ValueError:
+            set_if_changed(self.trigger_status, "Enter a numeric voltage")
+            return nominal_start, nominal_end, None
+        if not np.isfinite(level):
+            set_if_changed(self.trigger_status, "Enter a finite voltage")
+            return nominal_start, nominal_end, None
+
+        source = channel_1 if self.trigger_channel.get() == "CH1" else channel_2
+        if source is None or len(source) < 2:
+            set_if_changed(self.trigger_status, f"Waiting for {self.trigger_channel.get()} data")
+            return nominal_start, nominal_end, None
+
+        configured_visible = self.__dict__.get("signal_window_samples", 0)
+        visible = min(
+            max(int(configured_visible), 2) if configured_visible else nominal_end - nominal_start,
+            sample_count,
+        )
+        pre_trigger_samples = round((visible - 1) * TRIGGER_PRE_SAMPLES_FRACTION)
+        post_trigger_samples = visible - 1 - pre_trigger_samples
+        desired_logical_index = sample_count - 1 - post_trigger_samples
+        padding = min(max(self.signal_padding_samples, 0), sample_count)
+        data_span = max(sample_count - padding, 1)
+        desired_source_index = round(
+            (desired_logical_index - padding) * max(len(source) - 1, 1) / data_span
+        )
+        minimum_source_index = round(
+            (pre_trigger_samples - padding) * max(len(source) - 1, 1) / data_span
+        )
+        source_index = find_trigger_crossing(
+            source,
+            level,
+            self.trigger_edge.get(),
+            target_index=desired_source_index,
+            minimum_index=max(minimum_source_index, 1),
+            maximum_index=desired_source_index,
+        )
+        if source_index is None:
+            edge_symbol = "↑" if self.trigger_edge.get() == "Rising" else "↓"
+            set_if_changed(
+                self.trigger_status,
+                f"Armed {self.trigger_channel.get()} {edge_symbol} · waiting",
+            )
+            return nominal_start, nominal_end, None
+
+        logical_index = padding + round(
+            source_index * max(data_span - 1, 0) / max(len(source) - 1, 1)
+        )
+        max_start = max(sample_count - visible, 0)
+        start = logical_index - pre_trigger_samples
+        start = min(max(start, 0), max_start)
+        return start, start + visible, logical_index
 
     def _update_time_controls(
         self,
@@ -3398,6 +3671,9 @@ class ReceiverApp(tk.Tk):
 
     def _clear_live_plot(self) -> None:
         self._reset_display_pause()
+        self.trigger_capture_valid = False
+        if "test_output_label" in self.__dict__:
+            self._set_test_output_ui(False)
         with self.frame_lock:
             self.latest_frame = None
             self.sample_history.clear()
@@ -3906,7 +4182,10 @@ class ReceiverApp(tk.Tk):
         time_unit = "ms" if duration_ms >= 5.0 else "µs"
         for index in range(6):
             x = left_pad + index * plot_width / 5
-            time_value = round(index * duration_ms / 5 * time_factor)
+            time_ms = index * duration_ms / 5
+            if self.axis_trigger_offset_samples is not None and self.axis_sample_rate_hz > 0:
+                time_ms -= self.axis_trigger_offset_samples / self.axis_sample_rate_hz * 1000
+            time_value = round(time_ms * time_factor)
             self.grid_items.append(
                 self.canvas.create_text(
                     x,
@@ -3923,18 +4202,39 @@ class ReceiverApp(tk.Tk):
     ) -> None:
         width = max(self.canvas.winfo_width(), 1)
         height = max(self.canvas.winfo_height(), 1)
+        start_index, end_index, trigger_index = self._trigger_window_bounds(
+            channel_1, channel_2, samples_per_channel
+        )
+        if self.trigger_enabled.get() and trigger_index is None:
+            # Normal trigger mode: retain the last valid capture while armed.
+            if not self.trigger_capture_valid:
+                self._set_signal_notice(
+                    f"Trigger armed\nWaiting for {self.trigger_channel.get()} "
+                    f"{self.trigger_edge.get().lower()} edge"
+                )
+            return
+        self.trigger_capture_valid = trigger_index is not None
         self._clear_signal_notice()
         for item in self.trace_items:
             self.canvas.delete(item)
         self.trace_items.clear()
 
-        plot_channel_1 = self._window_channel(channel_1) if self.channel_1_visible.get() else None
-        plot_channel_2 = self._window_channel(channel_2) if self.channel_2_visible.get() else None
-        start_index, end_index = self._window_bounds(samples_per_channel)
+        plot_channel_1 = (
+            self._window_channel_for_bounds(channel_1, start_index, end_index, samples_per_channel)
+            if self.channel_1_visible.get()
+            else None
+        )
+        plot_channel_2 = (
+            self._window_channel_for_bounds(channel_2, start_index, end_index, samples_per_channel)
+            if self.channel_2_visible.get()
+            else None
+        )
         visible_samples = max(end_index - start_index, 1)
+        trigger_offset_samples = trigger_index - start_index if trigger_index is not None else None
         axis_changed = (
             sample_rate_hz != self.axis_sample_rate_hz
             or visible_samples != self.axis_samples_per_channel
+            or trigger_offset_samples != self.axis_trigger_offset_samples
             or self.y_axis_dirty
         )
         if self.y_axis_fit_pending:
@@ -3942,6 +4242,7 @@ class ReceiverApp(tk.Tk):
             axis_changed = True
         self.axis_sample_rate_hz = sample_rate_hz
         self.axis_samples_per_channel = visible_samples
+        self.axis_trigger_offset_samples = trigger_offset_samples
         self._update_time_controls(sample_rate_hz, samples_per_channel, start_index, end_index)
         if not self.grid_items or axis_changed:
             self._redraw_grid()
@@ -3954,7 +4255,7 @@ class ReceiverApp(tk.Tk):
         plot_bottom = SIGNAL_PLOT_TOP_PAD + plot_height
         y_scale = (plot_height * 0.5) / self.axis_y_abs
         plot_points = self._signal_plot_points()
-        padding = min(self.signal_padding_samples, visible_samples)
+        padding = min(max(self.signal_padding_samples - start_index, 0), visible_samples)
         trace_left = left_pad + plot_width * padding / visible_samples
         trace_width = plot_width * (visible_samples - padding) / visible_samples
         draw_channel(
@@ -3979,6 +4280,47 @@ class ReceiverApp(tk.Tk):
             plot_points,
             tag="signal_ch2",
         )
+        if trigger_index is not None:
+            trigger_x = left_pad + (
+                (trigger_index - start_index) * plot_width / max(visible_samples - 1, 1)
+            )
+            self.trace_items.append(
+                self.canvas.create_line(
+                    trigger_x,
+                    SIGNAL_PLOT_TOP_PAD,
+                    trigger_x,
+                    plot_bottom,
+                    fill=COLORS["warning"],
+                    width=1,
+                    dash=(3, 3),
+                )
+            )
+            trigger_level = float(self.trigger_level.get().strip())
+            trigger_channel_number = 1 if self.trigger_channel.get() == "CH1" else 2
+            trigger_y = (
+                SIGNAL_PLOT_TOP_PAD
+                + self._channel_y_offset(trigger_channel_number, plot_height)
+                - trigger_level * y_scale
+            )
+            if SIGNAL_PLOT_TOP_PAD <= trigger_y <= plot_bottom:
+                self.trace_items.append(
+                    self.canvas.create_line(
+                        left_pad,
+                        trigger_y,
+                        left_pad + plot_width,
+                        trigger_y,
+                        fill=COLORS["warning"],
+                        width=1,
+                        dash=(3, 3),
+                    )
+                )
+            edge_symbol = "↑" if self.trigger_edge.get() == "Rising" else "↓"
+            visible_seconds = visible_samples / sample_rate_hz if sample_rate_hz > 0 else 0.0
+            set_if_changed(
+                self.trigger_status,
+                f"Triggered {self.trigger_channel.get()} {edge_symbol} "
+                f"{format_voltage(trigger_level)} · {format_duration(visible_seconds)}",
+            )
         if self.cursor_enabled:
             cursor_x = left_pad + plot_width / 2
             self.trace_items.append(
@@ -4387,6 +4729,39 @@ def normalize_script_channel(value: Any, length: int) -> np.ndarray[Any, Any] | 
         scalar = float(array.reshape(-1)[0])
         return np.full(max(length, 2), scalar, dtype=np.float64)
     return np.nan_to_num(array.reshape(-1).astype(np.float64, copy=False))
+
+
+def find_trigger_crossing(
+    samples: Any,
+    level: float,
+    edge: str,
+    *,
+    target_index: int | None = None,
+    minimum_index: int | None = None,
+    maximum_index: int | None = None,
+) -> int | None:
+    """Find the requested threshold edge nearest the preferred display position."""
+    if samples is None or len(samples) < 2 or not np.isfinite(level):
+        return None
+    data = samples_to_numpy(samples).reshape(-1)
+    before = data[:-1]
+    after = data[1:]
+    finite = np.isfinite(before) & np.isfinite(after)
+    if edge.lower() == "falling":
+        matches = finite & (before > level) & (after <= level)
+    else:
+        matches = finite & (before < level) & (after >= level)
+    crossings = np.flatnonzero(matches) + 1
+    if minimum_index is not None:
+        crossings = crossings[crossings >= minimum_index]
+    if maximum_index is not None:
+        crossings = crossings[crossings <= maximum_index]
+    if len(crossings) == 0:
+        return None
+    if target_index is None:
+        return int(crossings[-1])
+    nearest = int(np.argmin(np.abs(crossings - target_index)))
+    return int(crossings[nearest])
 
 
 def sample_range(samples: Any) -> tuple[float, float] | None:

@@ -88,6 +88,118 @@ async def test_connect_uses_version_3_split_clients(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
+async def test_test_sine_reuses_the_active_version_3_engine_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[object, ...]] = []
+    config_clients: list[object] = []
+
+    monkeypatch.setattr(streaming_source_module, "_streaming_service_ready", lambda _host: True)
+
+    class Callback:
+        pass
+
+    class ConfigClient:
+        def __init__(self) -> None:
+            config_clients.append(self)
+
+        def connect(self, hosts: list[str]) -> bool:
+            calls.append(("connect", hosts))
+            return True
+
+        def sendConfig(self, host: str, key: str, value: str) -> bool:
+            calls.append(("config", host, key, value))
+            return True
+
+    class ADCClient:
+        def __init__(self, config_client: ConfigClient) -> None:
+            calls.append(("adc-construct", config_client))
+
+        def setCallback(self, _callback: Callback) -> bool:
+            return True
+
+    class DACClient:
+        def __init__(self, config_client: ConfigClient) -> None:
+            calls.append(("dac-construct", config_client))
+
+        def setMemory16Bit(self, channel: int, samples: list[int]) -> bool:
+            calls.append(("dac-memory", channel, samples))
+            return True
+
+        def setRepeatInf(self, enabled: bool) -> None:
+            calls.append(("dac-repeat", enabled))
+
+        def startStreamingFromMemory(self, host: str) -> bool:
+            calls.append(("dac-start", host))
+            return True
+
+        def notifyStop(self) -> None:
+            calls.append(("dac-stop",))
+
+        def wait(self) -> None:
+            calls.append(("dac-wait",))
+
+    module = ModuleType("test_streaming_module_v3_dac")
+    module.ConfigStreamClient = ConfigClient  # type: ignore[attr-defined]
+    module.ADCStreamClient = ADCClient  # type: ignore[attr-defined]
+    module.DACStreamClient = DACClient  # type: ignore[attr-defined]
+    module.ADCCallback = Callback  # type: ignore[attr-defined]
+    loaded = LoadedStreamingLibrary(module=module, name=module.__name__, path=None)
+    monkeypatch.setattr(streaming_source_module, "load_streaming_library", lambda _name: loaded)
+    source = RedPitayaStreamingSource(
+        Settings(_env_file=None, source="redpitaya", host="rp-test.local")
+    )
+
+    await source.connect()
+    await source.set_test_output1_sine(
+        True,
+        frequency_hz=1_000,
+        amplitude_volts=0.2,
+    )
+
+    assert len(config_clients) == 1
+    assert ("adc-construct", config_clients[0]) in calls
+    assert ("dac-construct", config_clients[0]) in calls
+    assert (
+        "config",
+        "rp-test.local",
+        "dac_pass_mode",
+        "DAC_NET",
+    ) in calls
+    assert (
+        "config",
+        "rp-test.local",
+        "dac_rate",
+        str(streaming_source_module.TEST_OUTPUT_DAC_RATE_HZ),
+    ) in calls
+    assert (
+        "config",
+        "rp-test.local",
+        "dac_size",
+        str(streaming_source_module.TEST_OUTPUT_DAC_BUFFER_SIZE_BYTES),
+    ) in calls
+    memory_call = next(call for call in calls if call[0] == "dac-memory")
+    assert memory_call[1] == 1
+    samples = memory_call[2]
+    assert isinstance(samples, list)
+    assert len(samples) % 64 == 0
+    assert max(samples) <= round(32_767 * 0.2)
+    assert min(samples) >= -round(32_767 * 0.2)
+    assert ("dac-repeat", True) in calls
+    assert ("dac-start", "rp-test.local") in calls
+
+    await source.set_test_output1_sine(
+        False,
+        frequency_hz=1_000,
+        amplitude_volts=0.2,
+    )
+
+    assert ("dac-stop",) in calls
+    assert ("dac-wait",) in calls
+    await source.disconnect()
+
+
+@pytest.mark.asyncio
 async def test_version_3_starts_board_app_before_entering_native_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

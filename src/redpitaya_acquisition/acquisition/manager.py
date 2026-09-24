@@ -53,6 +53,10 @@ class AcquisitionManager:
         self._summary_task: asyncio.Task[None] | None = None
         self._ready: asyncio.Future[None] | None = None
 
+    @property
+    def source(self) -> AcquisitionSource | None:
+        return self._source
+
     async def start(self) -> StatusResponse:
         async with self._lock:
             if self.state in {

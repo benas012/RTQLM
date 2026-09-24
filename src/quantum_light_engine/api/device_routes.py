@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Request, Response, status
 
 from quantum_light_engine.api.errors import EngineApiError, not_found, state_conflict
+from quantum_light_engine.api.schemas import TestOutputRequest
 from quantum_light_engine.devices.discovery import SavedProfileDiscovery
 from quantum_light_engine.devices.models import DeviceProfileCreate, DeviceProfileUpdate
 from quantum_light_engine.devices.session import DeviceSession
@@ -119,6 +120,40 @@ async def start(request: Request, device_id: UUID) -> dict[str, Any]:
 @router.post("/{device_id}/stop")
 async def stop(request: Request, device_id: UUID) -> dict[str, Any]:
     return await _lifecycle(request, device_id, "stop")
+
+
+@router.post("/{device_id}/outputs/1/test-sine")
+async def set_test_output_sine(
+    request: Request,
+    device_id: UUID,
+    output: TestOutputRequest,
+) -> dict[str, Any]:
+    session = _session(request, device_id)
+    try:
+        return await session.set_test_output1_sine(
+            output.enabled,
+            frequency_hz=1_000,
+            amplitude_volts=0.2,
+        )
+    except RuntimeError as exc:
+        detail = str(exc)
+        if "connect the Red Pitaya" in detail or "only available" in detail:
+            raise state_conflict(device_id, detail) from exc
+        raise EngineApiError(
+            "test-output-unavailable",
+            "Red Pitaya test output unavailable",
+            503,
+            detail,
+            device_id,
+        ) from exc
+    except Exception as exc:
+        raise EngineApiError(
+            "test-output-unavailable",
+            "Red Pitaya test output unavailable",
+            503,
+            str(exc),
+            device_id,
+        ) from exc
 
 
 @router.get("/{device_id}/status")

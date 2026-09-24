@@ -412,3 +412,76 @@ def test_engine_command_prefers_named_project_launcher(
         "--port",
         "8080",
     ]
+
+
+def test_out1_test_button_toggles_the_selected_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeButton:
+        def __init__(self) -> None:
+            self.style = ""
+
+        def configure(self, *, style: str) -> None:
+            self.style = style
+
+    app = app_for_connect("streaming")
+    app.test_output_enabled = False
+    app.test_output_device_id = None
+    app.test_output_label = Value("OUT1 sine")
+    app.test_output_button = FakeButton()  # type: ignore[assignment]
+    app._ui_log = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    app.api_base = Value("http://engine.local:8080")
+    calls: list[tuple[str, str, dict[str, bool]]] = []
+
+    def api(
+        _api_base: str,
+        method: str,
+        path: str,
+        body: dict[str, bool],
+    ) -> dict[str, object]:
+        calls.append((method, path, body))
+        return {
+            "enabled": body["enabled"],
+            "frequencyHz": 1_000,
+            "amplitudeVolts": 0.2,
+        }
+
+    app._api_for_base = api  # type: ignore[method-assign]
+
+    def run_busy(_label: str, work: Any, callback: Any) -> None:
+        callback(work())
+
+    app._run_busy = run_busy  # type: ignore[method-assign]
+
+    app.toggle_test_output()
+    first_device_id = "11111111-1111-1111-1111-111111111111"
+    assert calls[-1] == (
+        "POST",
+        f"/api/v1/devices/{first_device_id}/outputs/1/test-sine",
+        {"enabled": True},
+    )
+    assert app.test_output_enabled
+    assert app.test_output_device_id == first_device_id
+    assert app.test_output_label.get() == "Stop OUT1"
+    assert app.test_output_button.style == "Active.TButton"
+
+    app.selected_device = nr.Device(
+        id="22222222-2222-2222-2222-222222222222",
+        name="Other RP",
+        host="other-rp.local",
+        state="streaming",
+        channel_1_enabled=True,
+        channel_2_enabled=True,
+        decimation=64,
+        block_size_bytes=16_384,
+    )
+    app.toggle_test_output()
+    assert calls[-1] == (
+        "POST",
+        f"/api/v1/devices/{first_device_id}/outputs/1/test-sine",
+        {"enabled": False},
+    )
+    assert not app.test_output_enabled
+    assert app.test_output_device_id is None
+    assert app.test_output_label.get() == "OUT1 sine"
+    assert app.test_output_button.style == "Compact.TButton"

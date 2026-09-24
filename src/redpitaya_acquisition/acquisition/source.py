@@ -35,3 +35,12 @@ class AcquisitionSource(ABC):
 
     def take_malformed_packets(self) -> int:
         return 0
+
+    async def set_test_output1_sine(
+        self,
+        enabled: bool,
+        *,
+        frequency_hz: float,
+        amplitude_volts: float,
+    ) -> None:
+        raise RuntimeError("test output is not supported by this acquisition source")

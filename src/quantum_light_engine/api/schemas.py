@@ -22,3 +22,7 @@ class EngineStatus(BaseModel):
     connected_device_count: int
     streaming_device_count: int
     total_web_socket_clients: int
+
+
+class TestOutputRequest(BaseModel):
+    enabled: bool

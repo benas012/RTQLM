@@ -78,6 +78,19 @@ class _PreparedSource(AcquisitionSource):
     def take_malformed_packets(self) -> int:
         return self.source.take_malformed_packets()
 
+    async def set_test_output1_sine(
+        self,
+        enabled: bool,
+        *,
+        frequency_hz: float,
+        amplitude_volts: float,
+    ) -> None:
+        await self.source.set_test_output1_sine(
+            enabled,
+            frequency_hz=frequency_hz,
+            amplitude_volts=amplitude_volts,
+        )
+
 
 class DeviceSession:
     def __init__(self, profile: DeviceProfile, engine_settings: EngineSettings) -> None:
@@ -188,6 +201,35 @@ class DeviceSession:
             self._settings = acquisition_settings(profile, self.engine_settings)
             self.manager.settings = self._settings
             self._transition(DeviceSessionState.DISCONNECTED)
+
+    async def set_test_output1_sine(
+        self,
+        enabled: bool,
+        *,
+        frequency_hz: float,
+        amplitude_volts: float,
+    ) -> dict[str, Any]:
+        async with self._lock:
+            if self.profile.source is not DeviceSource.REDPITAYA:
+                raise RuntimeError("OUT1 test output is only available for Red Pitaya devices")
+            if self.state not in {DeviceSessionState.READY, DeviceSessionState.STREAMING}:
+                raise RuntimeError("connect the Red Pitaya before controlling OUT1")
+            source = self._prepared_source if self.state is DeviceSessionState.READY else None
+            source = source or self.manager.source
+            if source is None:
+                raise RuntimeError("the active Red Pitaya source is unavailable")
+            await source.set_test_output1_sine(
+                enabled,
+                frequency_hz=frequency_hz,
+                amplitude_volts=amplitude_volts,
+            )
+            return {
+                "enabled": enabled,
+                "channel": 1,
+                "waveform": "sine",
+                "frequencyHz": frequency_hz,
+                "amplitudeVolts": amplitude_volts,
+            }
 
     def status(self) -> dict[str, Any]:
         base = self.manager.status().model_dump(mode="json", by_alias=True)

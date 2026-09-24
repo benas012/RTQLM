@@ -99,6 +99,96 @@ def test_zoom_out_uses_history_and_fit_returns_to_latest_batch() -> None:
     assert app._frame_for_signal(app.latest_frame) is app.latest_frame
 
 
+def test_trigger_crossing_supports_rising_falling_and_nearest_match() -> None:
+    samples = np.array([-1.0, 1.0, 1.0, -1.0, -1.0, 1.0])
+
+    assert nr.find_trigger_crossing(samples, 0.0, "Rising", target_index=1) == 1
+    assert nr.find_trigger_crossing(samples, 0.0, "Rising", target_index=5) == 5
+    assert nr.find_trigger_crossing(samples, 0.0, "Falling") == 3
+    assert nr.find_trigger_crossing(samples, 2.0, "Rising") is None
+
+
+def test_voltage_trigger_aligns_crossing_at_one_quarter_of_visible_period() -> None:
+    app = nr.ReceiverApp.__new__(nr.ReceiverApp)
+    app.time_zoom = 4.0
+    app.time_pan = 0.5
+    app.signal_padding_samples = 0
+    app.trigger_enabled = Value(True)
+    app.trigger_channel = Value("CH1")
+    app.trigger_edge = Value("Rising")
+    app.trigger_level = Value("0.25")
+    app.trigger_status = Value("")
+    channel_1 = np.full(100, -0.5)
+    channel_1[60:] = 0.5
+
+    start, end, crossing = app._trigger_window_bounds(channel_1, None, 100)
+
+    assert (start, end, crossing) == (54, 79, 60)
+    assert crossing - start == pytest.approx(
+        (end - start - 1) * nr.TRIGGER_PRE_SAMPLES_FRACTION,
+        abs=1,
+    )
+
+
+def test_voltage_trigger_uses_history_to_align_a_full_batch() -> None:
+    app = nr.ReceiverApp.__new__(nr.ReceiverApp)
+    app.time_zoom = 1.0
+    app.time_pan = 0.0
+    app.signal_padding_samples = 0
+    app.signal_window_samples = 100
+    app.trigger_enabled = Value(True)
+    app.trigger_channel = Value("CH1")
+    app.trigger_edge = Value("Rising")
+    app.trigger_level = Value("0")
+    app.trigger_status = Value("")
+    channel_1 = np.full(200, -0.5)
+    channel_1[120:] = 0.5
+
+    start, end, crossing = app._trigger_window_bounds(channel_1, None, 200)
+
+    assert (start, end, crossing) == (95, 195, 120)
+    assert crossing - start == 25
+
+
+def test_trigger_searches_extra_history_without_expanding_the_display_window() -> None:
+    app = nr.ReceiverApp.__new__(nr.ReceiverApp)
+    app.frame_lock = threading.Lock()
+    app.sample_history = nr.SampleHistory(capacity=400)
+    app.time_zoom = 1.0
+    app.time_pan = 0.0
+    app.signal_scripts_enabled = False
+    app.signal_resolution = Value("Medium")
+    app.trigger_enabled = Value(True)
+    first = frame(1, 0, count=100)
+    second = frame(2, 100, count=100)
+    app.sample_history.append(first)
+    app.sample_history.append(second)
+    app.latest_frame = second
+
+    channel_1, _channel_2, _rate, search_count = app._channels_for_signal(second)
+
+    assert search_count == 200
+    assert app.signal_window_samples == 100
+    np.testing.assert_array_equal(channel_1, np.arange(200))
+
+
+def test_voltage_trigger_stays_armed_when_threshold_is_not_crossed() -> None:
+    app = nr.ReceiverApp.__new__(nr.ReceiverApp)
+    app.time_zoom = 2.0
+    app.time_pan = 0.0
+    app.signal_padding_samples = 0
+    app.trigger_enabled = Value(True)
+    app.trigger_channel = Value("CH2")
+    app.trigger_edge = Value("Falling")
+    app.trigger_level = Value("0")
+    app.trigger_status = Value("")
+
+    start, end, crossing = app._trigger_window_bounds(None, np.ones(20), 20)
+
+    assert (start, end, crossing) == (0, 10, None)
+    assert "waiting" in app.trigger_status.get().lower()
+
+
 def test_large_packet_keeps_the_history_within_its_memory_limit() -> None:
     history = nr.SampleHistory(capacity=10)
     latest = frame(1, 0, count=20)

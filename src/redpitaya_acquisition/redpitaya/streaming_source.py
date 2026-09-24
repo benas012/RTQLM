@@ -7,6 +7,8 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
+import numpy as np
+
 from redpitaya_acquisition.acquisition.manager import NonRecoverableAcquisitionError
 from redpitaya_acquisition.acquisition.source import AcquisitionSource
 from redpitaya_acquisition.config.settings import Settings
@@ -25,6 +27,12 @@ POST_RESTART_CONNECT_INTERVAL_SECONDS = 1.0
 STREAMING_APP_RESTART_ATTEMPTS = 3
 VERSION_3_CONFIG_PORT = 18_901
 STREAMING_PORT_PROBE_TIMEOUT_SECONDS = 0.5
+TEST_OUTPUT_DAC_RATE_HZ = 1_953_125
+TEST_OUTPUT_DAC_BUFFER_SIZE_BYTES = 1_638_400
+TEST_OUTPUT_BUFFER_PERIODS = 64
+# Despite saying "64 bytes", version 3.00 of the vendor client rejects
+# 16-bit buffers unless the sample count itself is a multiple of 64.
+DAC_16_BIT_SAMPLE_ALIGNMENT = 64
 
 
 class RedPitayaStreamingSource(AcquisitionSource):
@@ -35,6 +43,7 @@ class RedPitayaStreamingSource(AcquisitionSource):
         self._config_client: Any = None
         self._adapter: StreamingCompatibility | None = None
         self._callback: Any = None
+        self._test_output_client: Any = None
         self._queue: asyncio.Queue[RawSampleFrame | BaseException] = asyncio.Queue(
             maxsize=settings.internal_queue_capacity
         )
@@ -213,12 +222,92 @@ class RedPitayaStreamingSource(AcquisitionSource):
 
     async def disconnect(self) -> None:
         self._running = False
+        await self.set_test_output1_sine(
+            False,
+            frequency_hz=1_000,
+            amplitude_volts=0.2,
+        )
         if self._adapter is not None:
             await asyncio.to_thread(self._adapter.disconnect)
         self._adapter = None
         self._client = None
         self._config_client = None
         self._callback = None
+
+    async def set_test_output1_sine(
+        self,
+        enabled: bool,
+        *,
+        frequency_hz: float,
+        amplitude_volts: float,
+    ) -> None:
+        if enabled:
+            await asyncio.to_thread(
+                self._start_test_output1_sine,
+                frequency_hz,
+                amplitude_volts,
+            )
+        else:
+            await asyncio.to_thread(self._stop_test_output1_sine)
+
+    def _start_test_output1_sine(self, frequency_hz: float, amplitude_volts: float) -> None:
+        if self._test_output_client is not None:
+            return
+        if self._library is None or self._config_client is None or self._adapter is None:
+            raise RuntimeError(
+                "OUT1 testing requires an active Red Pitaya 3.x streaming connection"
+            )
+        module = self._library.module
+        if not hasattr(module, "DACStreamClient"):
+            raise RuntimeError("the installed Red Pitaya streaming client has no DAC support")
+        if frequency_hz <= 0 or not 0 < amplitude_volts <= 1:
+            raise ValueError("test sine frequency and amplitude must be positive and safe")
+
+        host = self._adapter.host or streaming_host(self._settings.host)
+        dac_client = module.DACStreamClient(self._config_client)
+        try:
+            for key, value in (
+                ("dac_pass_mode", "DAC_NET"),
+                ("dac_rate", str(TEST_OUTPUT_DAC_RATE_HZ)),
+                ("dac_size", str(TEST_OUTPUT_DAC_BUFFER_SIZE_BYTES)),
+            ):
+                try:
+                    result = self._config_client.sendConfig(host, key, value)
+                except TypeError:
+                    result = self._config_client.sendConfig(key, value)
+                _require_success(f"configure {key}", result)
+
+            unaligned_samples = TEST_OUTPUT_DAC_RATE_HZ * TEST_OUTPUT_BUFFER_PERIODS / frequency_hz
+            buffer_samples = max(
+                DAC_16_BIT_SAMPLE_ALIGNMENT,
+                round(unaligned_samples / DAC_16_BIT_SAMPLE_ALIGNMENT)
+                * DAC_16_BIT_SAMPLE_ALIGNMENT,
+            )
+            phase = np.arange(buffer_samples, dtype=np.float64) * (
+                2 * np.pi * TEST_OUTPUT_BUFFER_PERIODS / buffer_samples
+            )
+            peak_counts = round(np.iinfo(np.int16).max * amplitude_volts)
+            samples = (np.sin(phase) * peak_counts).astype(np.int16).tolist()
+            _require_success("load OUT1 sine buffer", dac_client.setMemory16Bit(1, samples))
+            dac_client.setRepeatInf(True)
+            _require_success(
+                "start OUT1 DAC stream",
+                dac_client.startStreamingFromMemory(host),
+            )
+        except Exception:
+            try:
+                dac_client.notifyStop()
+            except Exception:
+                pass
+            raise
+        self._test_output_client = dac_client
+
+    def _stop_test_output1_sine(self) -> None:
+        client, self._test_output_client = self._test_output_client, None
+        if client is None:
+            return
+        client.notifyStop()
+        client.wait()
 
     async def frames(self) -> AsyncIterator[RawSampleFrame]:
         while self._running:
@@ -263,6 +352,12 @@ class RedPitayaStreamingSource(AcquisitionSource):
             self._queue.get_nowait()
             self._queue.task_done()
         self._queue.put_nowait(error)
+
+
+def _require_success(operation: str, result: Any) -> None:
+    integer_failure = isinstance(result, int) and not isinstance(result, bool) and result < 0
+    if result is False or integer_failure:
+        raise RuntimeError(f"Red Pitaya could not {operation}")
 
 
 def _streaming_service_ready(host: str) -> bool:

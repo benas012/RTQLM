@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from quantum_light_engine.application import create_app
 from quantum_light_engine.config.settings import EngineSettings
+from quantum_light_engine.devices.session import DeviceSession
 from redpitaya_acquisition.streaming.binary_protocol import decode_header
 
 
@@ -46,6 +47,48 @@ def test_device_crud_and_lifecycle(tmp_path: Path) -> None:
             client.post(f"/api/v1/devices/{device_id}/disconnect").json()["state"] == "disconnected"
         )
         assert client.delete(f"/api/v1/devices/{device_id}").status_code == 204
+
+
+def test_test_output_route_delegates_to_the_device_session(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    calls: list[tuple[bool, float, float]] = []
+
+    async def set_test_output(
+        self: DeviceSession,
+        enabled: bool,
+        *,
+        frequency_hz: float,
+        amplitude_volts: float,
+    ) -> dict[str, object]:
+        calls.append((enabled, frequency_hz, amplitude_volts))
+        return {
+            "enabled": enabled,
+            "channel": 1,
+            "waveform": "sine",
+            "frequencyHz": frequency_hz,
+            "amplitudeVolts": amplitude_volts,
+        }
+
+    monkeypatch.setattr(DeviceSession, "set_test_output1_sine", set_test_output)
+    with TestClient(app_for(tmp_path)) as client:
+        device_id = client.post("/api/v1/devices", json=device_body()).json()["id"]
+
+        response = client.post(
+            f"/api/v1/devices/{device_id}/outputs/1/test-sine",
+            json={"enabled": True},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "channel": 1,
+        "waveform": "sine",
+        "frequencyHz": 1_000,
+        "amplitudeVolts": 0.2,
+    }
+    assert calls == [(True, 1_000, 0.2)]
 
 
 def test_profile_update_from_ready_disconnects_instead_of_reconnecting(tmp_path: Path) -> None:
