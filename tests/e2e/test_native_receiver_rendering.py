@@ -83,6 +83,58 @@ def check_live_traces(receiver: nr.ReceiverApp) -> None:
     assert not app.spectrum_canvas.find_withtag("spectrum_trace")
 
 
+def check_trigger_overlay_reuse(app: nr.ReceiverApp) -> None:
+    count = 4096
+    phase = np.linspace(0, 16 * np.pi, count, endpoint=False)
+    ch1 = (np.sin(phase) * 2000).astype(np.int16)
+    ch2 = np.zeros(count, dtype=np.int16)
+    original = nr.SampleFrame(
+        3,
+        1,
+        488281.25,
+        count,
+        0,
+        0,
+        0,
+        memoryview(ch1),
+        memoryview(ch2),
+    )
+    app.trigger_enabled.set(True)
+    app.trigger_channel.set("CH1")
+    app.trigger_edge.set("Rising")
+    app.trigger_level.set("0")
+    app.apply_trigger_settings()
+
+    original_vertical: tuple[int, ...] | None = None
+    original_level: tuple[int, ...] | None = None
+    for sequence in range(1, 10):
+        frame = replace(original, sequence=sequence)
+        app.latest_frame = frame
+        app.sample_history.append(frame)
+        app._handle_frame(frame, sequence)
+        vertical = app.canvas.find_withtag("trigger_vertical")
+        level = app.canvas.find_withtag("trigger_level")
+        if not vertical:
+            assert not level
+            continue
+        assert len(vertical) == len(level) == 1
+        if original_vertical is None:
+            original_vertical, original_level = vertical, level
+        else:
+            assert vertical == original_vertical
+            assert level == original_level
+        assert app.canvas.itemcget(vertical, "state") == "normal"
+        assert app.canvas.itemcget(level, "state") == "normal"
+
+    assert original_vertical is not None and original_level is not None
+    app.trigger_enabled.set(False)
+    app.apply_trigger_settings()
+    assert app.canvas.itemcget(original_vertical, "state") == "hidden"
+    assert app.canvas.itemcget(original_level, "state") == "hidden"
+    app._clear_live_plot()
+    assert not app.canvas.find_withtag("signal_overlay")
+
+
 def check_ui_callbacks(receiver: nr.ReceiverApp) -> None:
     app = receiver
     frame = noisy_frame(4096 if app.time_zoom < 1 else 65536)
@@ -206,6 +258,8 @@ def run_scenario(scenario: str) -> None:
     with receiver() as app:
         if scenario == "traces":
             check_live_traces(app)
+        elif scenario == "trigger":
+            check_trigger_overlay_reuse(app)
         elif scenario == "history":
             check_history_zoom(app)
         elif scenario == "pause":
@@ -222,7 +276,7 @@ def run_scenario(scenario: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "scenario", ["traces", "callbacks", "history", "history_callbacks", "pause"]
+    "scenario", ["traces", "trigger", "callbacks", "history", "history_callbacks", "pause"]
 )
 def test_native_rendering(scenario: str) -> None:
     # Give each GUI scenario its own Tcl interpreter/process, like the real app.

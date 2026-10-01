@@ -124,6 +124,18 @@ def test_unknown_device_is_clear(tmp_path: Path) -> None:
         assert client.get("/api/v1/devices/00000000-0000-0000-0000-000000000000").status_code == 404
 
 
+def test_prepare_shutdown_disconnects_devices_before_process_exit(tmp_path: Path) -> None:
+    with TestClient(app_for(tmp_path)) as client:
+        device_id = client.post("/api/v1/devices", json=device_body()).json()["id"]
+        assert client.post(f"/api/v1/devices/{device_id}/start").json()["state"] == "streaming"
+
+        response = client.post("/api/v1/engine/prepare-shutdown")
+
+        assert response.status_code == 200
+        assert response.json() == {"state": "stopping"}
+        assert client.get(f"/api/v1/devices/{device_id}/status").json()["state"] == "disconnected"
+
+
 def test_removed_browser_and_legacy_routes_are_not_registered(tmp_path: Path) -> None:
     paths = {path for route in app_for(tmp_path).routes if (path := getattr(route, "path", None))}
     assert "/receiver" not in paths

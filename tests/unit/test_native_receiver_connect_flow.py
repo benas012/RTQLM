@@ -374,9 +374,11 @@ def test_stop_engine_terminates_owned_process_tree(monkeypatch: pytest.MonkeyPat
     app.status = Value("engine running")
     calls: list[str] = []
     terminated: list[object] = []
+    prepared: list[bool] = []
 
     app._ui_log = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     app._set_engine_status = lambda status: calls.append(status)  # type: ignore[method-assign]
+    app._prepare_engine_shutdown = lambda: prepared.append(True)  # type: ignore[method-assign]
 
     def run_busy(label: str, work: Any, callback: Any) -> None:
         calls.append(label)
@@ -387,6 +389,7 @@ def test_stop_engine_terminates_owned_process_tree(monkeypatch: pytest.MonkeyPat
 
     app.stop_engine()
 
+    assert prepared == [True]
     assert terminated == [process]
     assert app.engine_process is None
     assert app.status.get() == "engine stopped"

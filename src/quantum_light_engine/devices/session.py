@@ -91,6 +91,9 @@ class _PreparedSource(AcquisitionSource):
             amplitude_volts=amplitude_volts,
         )
 
+    async def shutdown_remote_service(self) -> None:
+        await self.source.shutdown_remote_service()
+
 
 class DeviceSession:
     def __init__(self, profile: DeviceProfile, engine_settings: EngineSettings) -> None:
@@ -175,7 +178,12 @@ class DeviceSession:
 
     async def disconnect(self) -> dict[str, Any]:
         async with self._lock:
+            active_source = self._prepared_source or self.manager.source
             if self.state is DeviceSessionState.DISCONNECTED:
+                if active_source is None and self.profile.source is DeviceSource.REDPITAYA:
+                    active_source = self._new_source()
+                if active_source is not None:
+                    await active_source.shutdown_remote_service()
                 return self.status()
             self._disconnecting = True
             try:
@@ -185,6 +193,8 @@ class DeviceSession:
                 if self._prepared_source is not None:
                     await self._prepared_source.disconnect()
                     self._prepared_source = None
+                if active_source is not None:
+                    await active_source.shutdown_remote_service()
                 self._transition(DeviceSessionState.DISCONNECTED)
             finally:
                 self._disconnecting = False
@@ -195,7 +205,9 @@ class DeviceSession:
             if self.state not in {DeviceSessionState.DISCONNECTED, DeviceSessionState.READY}:
                 raise RuntimeError("device profile cannot be updated in the current state")
             if self._prepared_source is not None:
-                await self._prepared_source.disconnect()
+                source = self._prepared_source
+                await source.disconnect()
+                await source.shutdown_remote_service()
                 self._prepared_source = None
             self.profile = profile
             self._settings = acquisition_settings(profile, self.engine_settings)

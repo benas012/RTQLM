@@ -2,7 +2,8 @@
 
 The native receiver is the first-class desktop client in `apps/native_receiver`. It connects to the
 [Quantum Light Engine](../../src/quantum_light_engine/README.md); it does not acquire from Red Pitaya
-hardware directly. The application renders live waveforms and spectra while preserving bounded history,
+hardware directly. The application renders live waveforms, spectra and nullifiers while preserving
+bounded history,
 health polling, loss counters, connection responsiveness, and display pacing.
 
 ## Start
@@ -39,13 +40,43 @@ Receiver settings persist in `data/native_receiver_settings.json`; cluster confi
 `data/cluster_processing.json`. Device profiles remain engine-owned under the engine data directory.
 
 The receiver supports selectable history windows, channel visibility and offsets, adaptive render
-pacing, FFT spectra, acquisition controls, and a live 1D cluster-nullifier dialog. Cluster processing
-uses both channels, configurable temporal modes and delays, rolling variance, and explicit shot-noise
-calibration. Processing errors are reported without stopping the sample stream.
+pacing, FFT spectra and acquisition controls. The analysis area has **Spectrum analyzer** and
+**Nullifiers** tabs. The Nullifiers tab shows a configurable live 1D graph, collection controls and
+shot-noise calibration, with advanced temporal-template and formula settings.
+
+New receiver configurations default to **5 ms locking / 5 ms collecting**, with variance at each
+temporal index across repeated, aligned collection windows. Rolling variance across neighboring modes
+is also available. Continuous, periodic and sampled-edge-triggered collection modes are available.
+Set the measured X/P basis to match both
+homodyne detectors and calibrate against shot noise before interpreting dB. The paper preset follows
+Larsen chapter 3's 1D signs and Gaussian-linear mode. Only complete modes in collection windows are
+used; nullifiers and variance windows do not cross locking intervals or reported data loss. Processing
+errors are reported without stopping the sample stream.
+
+See the [nullifier guide](../../docs/nullifiers.md) for equations, calibration, timing and trigger
+limitations, sample-rate requirements, and the recommended FPGA/Red Pitaya processing architecture.
+The current analog trigger is independent of the waveform display trigger; external TTL acquisition
+requires board/backend support. Stored custom configurations are retained, so review their formulas,
+mode shape and timing when upgrading from the earlier monitor. The exact previous built-in preset
+migrates in memory to the corrected paper preset; custom formulas are retained.
 
 Optional Python signal scripts are disabled by default. Set `QL_NATIVE_RECEIVER_SIGNAL_SCRIPT=1` before
 launch to enable the editor. Scripts execute in the receiver process against live NumPy arrays. The
 restricted built-in set is a convenience guard, not a secure sandbox: run only code you trust.
+
+## Code organization
+
+`native_receiver.py` is the application shell and compatibility import surface. Its `ReceiverApp`
+assembles small, responsibility-specific mixins rather than owning the full implementation:
+
+- `*_ui.py`, `layout.py`, and `theme.py` construct and arrange reusable Tk views.
+- `engine_controller.py`, `device_controller.py`, and `stream_controller.py` own lifecycle actions.
+- `frame_processor.py`, `signal_view.py`, and the renderer modules transform and display samples.
+- `api_client.py`, `device_repository.py`, and `helpers.py` isolate external I/O and pure utilities.
+- `state.py`, `constants.py`, and `dialogs.py` keep initialization, presentation data, and modals
+  independent; `entrypoint.py` owns command-line startup.
+
+Receiver source files are kept below 400 physical lines; a unit test protects this boundary.
 
 ## Troubleshooting and validation
 

@@ -12,6 +12,15 @@ from .host import web_base_url
 logger = logging.getLogger(__name__)
 
 
+def _request_streaming_app_operation(host: str, operation: str) -> None:
+    url = f"{web_base_url(host)}/bazaar?{operation}=streaming_manager&type=run"
+    try:
+        with urlopen(url, timeout=5) as response:
+            response.read(512)
+    except (RemoteDisconnected, HTTPError, URLError, TimeoutError, OSError) as exc:
+        logger.debug("streaming app %s request did not return cleanly: %s", operation, exc)
+
+
 def request_streaming_app_start(host: str, startup_delay_seconds: float) -> None:
     """Ask the Red Pitaya web app manager to start Data stream control.
 
@@ -20,18 +29,18 @@ def request_streaming_app_start(host: str, startup_delay_seconds: float) -> None
     the native streaming client perform the authoritative connection check.
     """
 
-    base_url = web_base_url(host)
     for operation in ("stop", "start"):
-        url = f"{base_url}/bazaar?{operation}=streaming_manager&type=run"
-        try:
-            with urlopen(url, timeout=5) as response:
-                response.read(512)
-        except (RemoteDisconnected, HTTPError, URLError, TimeoutError, OSError) as exc:
-            logger.debug("streaming app %s request did not return cleanly: %s", operation, exc)
+        _request_streaming_app_operation(host, operation)
         if operation == "stop":
             time.sleep(3.0)
     if startup_delay_seconds:
         time.sleep(startup_delay_seconds)
+
+
+def request_streaming_app_stop(host: str) -> None:
+    """Stop the board-side Data stream control app during engine disconnect."""
+
+    _request_streaming_app_operation(host, "stop")
 
 
 def request_legacy_streaming_app_start(host: str) -> None:

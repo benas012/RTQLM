@@ -44,3 +44,8 @@ class AcquisitionSource(ABC):
         amplitude_volts: float,
     ) -> None:
         raise RuntimeError("test output is not supported by this acquisition source")
+
+    async def shutdown_remote_service(self) -> None:
+        """Stop any device-side service owned by this source."""
+
+        return

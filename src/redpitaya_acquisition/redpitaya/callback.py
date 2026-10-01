@@ -26,6 +26,33 @@ def create_callback(
     on_frame: FrameHandler,
     on_event: EventHandler,
 ) -> Any:
+    def dispatch_frame(frame: RawSampleFrame) -> None:
+        loop.call_soon_threadsafe(on_frame, frame)
+
+    def dispatch_event(event: str, detail: str | None) -> None:
+        loop.call_soon_threadsafe(on_event, event, detail)
+
+    return create_synchronous_callback(
+        base_class,
+        settings,
+        dispatch_frame,
+        dispatch_event,
+    )
+
+
+def create_synchronous_callback(
+    base_class: type[Any],
+    settings: Settings,
+    on_frame: FrameHandler,
+    on_event: EventHandler,
+) -> Any:
+    """Build a callback whose handlers are safe to supply from a worker process.
+
+    ``create_callback`` marshals vendor callback threads onto an asyncio loop.
+    The isolated native worker has no asyncio loop, so it uses this lower-level
+    form and serializes the converted frame over its IPC connection instead.
+    """
+
     stream_id = secrets.randbits(64)
 
     class NativeCallback(base_class):  # type: ignore[misc]
@@ -37,15 +64,15 @@ def create_callback(
             try:
                 frame = self._convert(pack)
             except Exception as exc:
-                loop.call_soon_threadsafe(on_event, "malformed", _safe_error(exc))
+                on_event("malformed", _safe_error(exc))
                 return
-            loop.call_soon_threadsafe(on_frame, frame)
+            on_frame(frame)
 
         def receivePack(self, *args: Any) -> None:
             # 2.07 wrappers call receivePack(pack); 3.00 calls
             # receivePack(client, pack).
             if not args:
-                loop.call_soon_threadsafe(on_event, "malformed", "missing ADC packet")
+                on_event("malformed", "missing ADC packet")
                 return
             self._receive(args[-1])
 
@@ -90,33 +117,33 @@ def create_callback(
             )
 
         def connected(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "connected", None)
+            on_event("connected", None)
 
         def disconnected(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "disconnected", None)
+            on_event("disconnected", None)
 
         def error(self, *_args: Any) -> None:
             detail = _safe_error(_args[-1] if _args else None)
-            loop.call_soon_threadsafe(on_event, "error", detail)
+            on_event("error", detail)
 
         def stopped(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "stopped", None)
+            on_event("stopped", None)
 
         def stoppedNoActiveChannels(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "error", "no active channels")
+            on_event("error", "no active channels")
 
         def stoppedMemError(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "error", "streaming memory error")
+            on_event("error", "streaming memory error")
 
         def stoppedMemModify(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "error", "streaming memory changed")
+            on_event("error", "streaming memory changed")
 
         def configError(self, *_args: Any) -> None:
             detail = _safe_error(_args[-1]) if _args else "configuration rejected"
-            loop.call_soon_threadsafe(on_event, "config_error", detail)
+            on_event("config_error", detail)
 
         def configErrorTimeout(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "config_error", "configuration timeout")
+            on_event("config_error", "configuration timeout")
 
     return NativeCallback()
 

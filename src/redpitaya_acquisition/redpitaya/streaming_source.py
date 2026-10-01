@@ -14,11 +14,20 @@ from redpitaya_acquisition.acquisition.source import AcquisitionSource
 from redpitaya_acquisition.config.settings import Settings
 from redpitaya_acquisition.domain.frame import RawSampleFrame
 
-from .app_manager import request_legacy_streaming_app_start, request_streaming_app_start
+from .app_manager import (
+    request_legacy_streaming_app_start,
+    request_streaming_app_start,
+    request_streaming_app_stop,
+)
 from .callback import create_callback
 from .compatibility import StreamingCompatibility
 from .host import streaming_host
 from .library_loader import LoadedStreamingLibrary, load_streaming_library
+from .native_worker import (
+    NativeStreamingWorker,
+    isolated_client_is_version_3,
+    should_isolate_native_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +36,8 @@ POST_RESTART_CONNECT_INTERVAL_SECONDS = 1.0
 STREAMING_APP_RESTART_ATTEMPTS = 3
 VERSION_3_CONFIG_PORT = 18_901
 STREAMING_PORT_PROBE_TIMEOUT_SECONDS = 0.5
+STREAMING_READY_CONSECUTIVE_PROBES = 3
+STREAMING_READY_PROBE_INTERVAL_SECONDS = 0.25
 TEST_OUTPUT_DAC_RATE_HZ = 1_953_125
 TEST_OUTPUT_DAC_BUFFER_SIZE_BYTES = 1_638_400
 TEST_OUTPUT_BUFFER_PERIODS = 64
@@ -44,21 +55,30 @@ class RedPitayaStreamingSource(AcquisitionSource):
         self._adapter: StreamingCompatibility | None = None
         self._callback: Any = None
         self._test_output_client: Any = None
+        self._native_worker: NativeStreamingWorker | None = None
+        self._isolate_native_client = should_isolate_native_client(settings.streaming_module)
+        self._isolated_client_is_version_3 = (
+            self._isolate_native_client
+            and isolated_client_is_version_3(settings.streaming_module)
+        )
+        self._module_name: str | None = None
+        self._module_path: str | None = None
         self._queue: asyncio.Queue[RawSampleFrame | BaseException] = asyncio.Queue(
             maxsize=settings.internal_queue_capacity
         )
         self._wait_task: asyncio.Task[None] | None = None
         self._running = False
+        self._connection_lost = False
         self._dropped_frames = 0
         self._malformed_packets = 0
 
     @property
     def module_name(self) -> str | None:
-        return self._library.name if self._library else None
+        return self._library.name if self._library else self._module_name
 
     @property
     def module_path(self) -> str | None:
-        return self._library.path if self._library else None
+        return self._library.path if self._library else self._module_path
 
     def take_dropped_frames(self) -> int:
         value, self._dropped_frames = self._dropped_frames, 0
@@ -70,23 +90,26 @@ class RedPitayaStreamingSource(AcquisitionSource):
 
     async def connect(self) -> None:
         host = streaming_host(self._settings.host)
-        self._library = load_streaming_library(self._settings.streaming_module)
+        if not self._isolate_native_client:
+            self._library = load_streaming_library(self._settings.streaming_module)
         try:
             await self._connect_native_client(host)
+            if self._native_worker is not None:
+                return
             assert self._adapter is not None
+            await asyncio.to_thread(self._adapter.stop_remote_stream)
             self._adapter.register_callback(self._callback)
             self._adapter.set_verbose(self._settings.verbose_library_logging)
             await asyncio.to_thread(self._adapter.configure, self._settings)
         except Exception:
             await self.disconnect()
+            await self.shutdown_remote_service()
             raise
 
     async def _connect_native_client(self, host: str) -> None:
         """Connect without disrupting an already-running board-side stream service."""
 
-        if self._uses_version_3_client() and not await asyncio.to_thread(
-            _streaming_service_ready, host
-        ):
+        if self._uses_version_3_client() and not await self._streaming_service_stable(host):
             if not self._settings.auto_start_streaming_app:
                 raise ConnectionError(
                     f"Red Pitaya 3.00 streaming service is not listening on '{host}'"
@@ -98,10 +121,8 @@ class RedPitayaStreamingSource(AcquisitionSource):
             await self._restart_streaming_app_until_connected(host)
             return
 
-        self._prepare_native_client()
-        assert self._adapter is not None
         try:
-            await asyncio.to_thread(self._adapter.connect, host)
+            await self._connect_native_client_once(host)
             return
         except Exception:
             if not self._settings.auto_start_streaming_app:
@@ -157,9 +178,7 @@ class RedPitayaStreamingSource(AcquisitionSource):
         deadline = time.monotonic() + POST_RESTART_CONNECT_TIMEOUT_SECONDS
         last_error: BaseException | None = None
         while True:
-            if self._uses_version_3_client() and not await asyncio.to_thread(
-                _streaming_service_ready, host
-            ):
+            if self._uses_version_3_client() and not await self._streaming_service_stable(host):
                 if time.monotonic() >= deadline:
                     raise ConnectionError(
                         f"Red Pitaya 3.00 streaming service did not open configuration port "
@@ -167,10 +186,8 @@ class RedPitayaStreamingSource(AcquisitionSource):
                     )
                 await asyncio.sleep(POST_RESTART_CONNECT_INTERVAL_SECONDS)
                 continue
-            self._prepare_native_client()
-            assert self._adapter is not None
             try:
-                await asyncio.to_thread(self._adapter.connect, host)
+                await self._connect_native_client_once(host)
                 return
             except Exception as exc:
                 last_error = exc
@@ -179,8 +196,34 @@ class RedPitayaStreamingSource(AcquisitionSource):
                     raise last_error from exc
                 await asyncio.sleep(POST_RESTART_CONNECT_INTERVAL_SECONDS)
 
+    async def _streaming_service_stable(self, host: str) -> bool:
+        for probe in range(STREAMING_READY_CONSECUTIVE_PROBES):
+            if not await asyncio.to_thread(_streaming_service_ready, host):
+                return False
+            if probe + 1 < STREAMING_READY_CONSECUTIVE_PROBES:
+                await asyncio.sleep(STREAMING_READY_PROBE_INTERVAL_SECONDS)
+        return True
+
     def _uses_version_3_client(self) -> bool:
+        if self._isolate_native_client:
+            return self._isolated_client_is_version_3
         return self._library is not None and hasattr(self._library.module, "ConfigStreamClient")
+
+    async def _connect_native_client_once(self, host: str) -> None:
+        if self._isolate_native_client:
+            worker = NativeStreamingWorker(self._settings, self._enqueue, self._event)
+            try:
+                await worker.connect(host)
+            except Exception:
+                await worker.close()
+                raise
+            self._native_worker = worker
+            self._module_name = worker.module_name
+            self._module_path = worker.module_path
+            return
+        self._prepare_native_client()
+        assert self._adapter is not None
+        await asyncio.to_thread(self._adapter.connect, host)
 
     def _prepare_native_client(self) -> None:
         assert self._library is not None
@@ -199,9 +242,16 @@ class RedPitayaStreamingSource(AcquisitionSource):
         )
 
     async def start(self) -> None:
+        if self._native_worker is not None:
+            await self._native_worker.start()
+            self._connection_lost = False
+            self._running = True
+            self._wait_task = self._native_worker.wait_task
+            return
         if self._adapter is None:
             raise RuntimeError("source is not connected")
         await asyncio.to_thread(self._adapter.start)
+        self._connection_lost = False
         self._running = True
         self._wait_task = asyncio.create_task(
             asyncio.to_thread(self._adapter.wait), name="redpitaya-native-wait"
@@ -209,7 +259,11 @@ class RedPitayaStreamingSource(AcquisitionSource):
 
     async def stop(self) -> None:
         self._running = False
-        if self._adapter is not None:
+        if self._native_worker is not None:
+            if not self._connection_lost:
+                await self._native_worker.stop()
+            return
+        if self._adapter is not None and not self._connection_lost:
             await asyncio.to_thread(self._adapter.stop)
         if self._wait_task is not None:
             try:
@@ -222,17 +276,32 @@ class RedPitayaStreamingSource(AcquisitionSource):
 
     async def disconnect(self) -> None:
         self._running = False
-        await self.set_test_output1_sine(
-            False,
-            frequency_hz=1_000,
-            amplitude_volts=0.2,
-        )
-        if self._adapter is not None:
+        worker, self._native_worker = self._native_worker, None
+        if worker is not None:
+            await worker.close()
+            self._wait_task = None
+            self._connection_lost = False
+            return
+        if self._connection_lost:
+            self._test_output_client = None
+        else:
+            await self.set_test_output1_sine(
+                False,
+                frequency_hz=1_000,
+                amplitude_volts=0.2,
+            )
+        if self._adapter is not None and not self._connection_lost:
             await asyncio.to_thread(self._adapter.disconnect)
         self._adapter = None
         self._client = None
         self._config_client = None
         self._callback = None
+        self._connection_lost = False
+
+    async def shutdown_remote_service(self) -> None:
+        if not self._settings.auto_start_streaming_app:
+            return
+        await asyncio.to_thread(request_streaming_app_stop, self._settings.host)
 
     async def set_test_output1_sine(
         self,
@@ -241,6 +310,13 @@ class RedPitayaStreamingSource(AcquisitionSource):
         frequency_hz: float,
         amplitude_volts: float,
     ) -> None:
+        if self._native_worker is not None:
+            await self._native_worker.set_test_output1_sine(
+                enabled,
+                frequency_hz=frequency_hz,
+                amplitude_volts=amplitude_volts,
+            )
+            return
         if enabled:
             await asyncio.to_thread(
                 self._start_test_output1_sine,
@@ -306,7 +382,11 @@ class RedPitayaStreamingSource(AcquisitionSource):
         client, self._test_output_client = self._test_output_client, None
         if client is None:
             return
-        client.notifyStop()
+        try:
+            if hasattr(client, "stopStreaming"):
+                client.stopStreaming()
+        finally:
+            client.notifyStop()
         client.wait()
 
     async def frames(self) -> AsyncIterator[RawSampleFrame]:
@@ -345,7 +425,10 @@ class RedPitayaStreamingSource(AcquisitionSource):
         if event == "config_error":
             self._put_error(NonRecoverableAcquisitionError(detail or event))
         elif event in {"disconnected", "error"}:
-            self._put_error(ConnectionError(detail or event))
+            self._connection_lost = True
+            if self._running:
+                logger.warning("Red Pitaya streaming connection lost: %s", detail or event)
+                self._put_error(ConnectionError(detail or event))
 
     def _put_error(self, error: BaseException) -> None:
         if self._queue.full():

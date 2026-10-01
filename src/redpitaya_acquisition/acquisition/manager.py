@@ -111,6 +111,7 @@ class AcquisitionManager:
         try:
             while not self._stop_event.is_set():
                 source: AcquisitionSource | None = None
+                reconnect_wait_seconds: float | None = None
                 try:
                     self._set_state(
                         AcquisitionState.CONNECTING if initial else AcquisitionState.RECONNECTING
@@ -151,10 +152,7 @@ class AcquisitionManager:
                     self._set_state(AcquisitionState.RECONNECTING)
                     jitter = random.uniform(0.0, min(0.25, delay * 0.1))
                     logger.warning("acquisition disconnected; reconnecting", extra={"delay": delay})
-                    try:
-                        await asyncio.wait_for(self._stop_event.wait(), timeout=delay + jitter)
-                    except TimeoutError:
-                        pass
+                    reconnect_wait_seconds = delay + jitter
                     delay = min(delay * 2.0, self.settings.reconnect_maximum_seconds)
                 finally:
                     if source is not None:
@@ -166,7 +164,22 @@ class AcquisitionManager:
                             await source.disconnect()
                         except Exception:
                             logger.debug("source disconnect failed during cleanup", exc_info=True)
+                        if reconnect_wait_seconds is not None:
+                            try:
+                                await source.shutdown_remote_service()
+                            except Exception:
+                                logger.debug(
+                                    "remote source shutdown failed during reconnect cleanup",
+                                    exc_info=True,
+                                )
                     self.connected = False
+                if reconnect_wait_seconds is not None:
+                    try:
+                        await asyncio.wait_for(
+                            self._stop_event.wait(), timeout=reconnect_wait_seconds
+                        )
+                    except TimeoutError:
+                        pass
         except asyncio.CancelledError:
             return
 

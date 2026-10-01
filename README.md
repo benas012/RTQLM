@@ -5,7 +5,9 @@ This repository contains two applications for multi-device Red Pitaya acquisitio
 - [Quantum Light Engine](src/quantum_light_engine/README.md) — the headless acquisition service,
   device-profile store, REST API, and binary WebSocket publisher.
 - [Native Receiver](apps/native_receiver/README.md) — the Tk desktop client for connecting to the
-  engine, viewing live signals and spectra, and running post-processing tools.
+  engine, viewing live signals, spectra and configurable 1D nullifiers, and running post-processing
+  tools. The analysis area has Spectrum analyzer and Nullifiers tabs, with configurable collection
+  windows for sample-hold experiments. See the [nullifier guide](docs/nullifiers.md).
 
 The shared `src/redpitaya_acquisition` package is the hardware-facing acquisition core used by the
 engine. It contains the simulator, Red Pitaya integration, frame model, binary encoder, loss metrics,

@@ -108,6 +108,85 @@ def test_trigger_crossing_supports_rising_falling_and_nearest_match() -> None:
     assert nr.find_trigger_crossing(samples, 2.0, "Rising") is None
 
 
+def test_raw_trigger_hysteresis_ignores_near_level_recrossings() -> None:
+    samples = np.array([-10, -6, -2, 1, -1, 1, -1, 2, 6], dtype=np.int16)
+    history = nr.SampleHistory(capacity=len(samples))
+    history.append(
+        nr.SampleFrame(1, 1, 1000.0, len(samples), 0, 0, 0, memoryview(samples), None)
+    )
+
+    assert history.find_channel_crossing_before(
+        1,
+        len(samples),
+        0,
+        "Rising",
+        target_index=len(samples) - 1,
+    ) == 7
+    assert history.find_channel_crossing_before(
+        1,
+        len(samples),
+        0,
+        "Rising",
+        target_index=len(samples) - 1,
+        hysteresis=5,
+    ) == 3
+
+
+def test_adc_counts_use_stemlab_125_14_voltage_scale() -> None:
+    samples = np.array([-8192, 0, 8191], dtype=np.int16)
+
+    volts = nr.adc_counts_to_volts(samples)
+
+    np.testing.assert_allclose(volts, [-1.0, 0.0, 8191 / 8192])
+
+
+def test_trigger_uses_raw_history_when_display_decimation_misses_crossing() -> None:
+    count = 200_000
+    display_indices = set(np.linspace(0, count - 1, nr.MAX_POINTS, dtype=np.intp))
+    pulse_index = next(
+        index
+        for index in range(100_000, 101_000)
+        if index not in display_indices and index + 1 not in display_indices
+    )
+    samples = np.full(count, -1000, dtype=np.int16)
+    samples[pulse_index : pulse_index + 2] = 1000
+    source = nr.SampleFrame(
+        1,
+        1,
+        1_000_000.0,
+        count,
+        0,
+        0,
+        0,
+        memoryview(samples),
+        None,
+    )
+    app = nr.ReceiverApp.__new__(nr.ReceiverApp)
+    app.frame_lock = threading.Lock()
+    app.sample_history = nr.SampleHistory(capacity=count)
+    app.sample_history.append(source)
+    app.time_zoom = 2.0
+    app.time_pan = 0.0
+    app.signal_scripts_enabled = False
+    app.signal_resolution = Value("Medium")
+    app.trigger_enabled = Value(True)
+    app.trigger_channel = Value("CH1")
+    app.trigger_edge = Value("Rising")
+    app.trigger_level = Value("0")
+    app.trigger_status = Value("")
+
+    channel_1, channel_2, _rate, search_count = app._channels_for_signal(source)
+    plotted_volts = nr.adc_counts_to_volts(channel_1)
+
+    assert channel_2 is None
+    assert search_count == count // 2
+    assert app.trigger_window_precomputed
+    assert app.precomputed_trigger_index == round(
+        (search_count - 1) * nr.TRIGGER_PRE_SAMPLES_FRACTION
+    )
+    assert nr.find_trigger_crossing(plotted_volts, 0.0, "Rising") is not None
+
+
 def test_voltage_trigger_aligns_crossing_at_one_quarter_of_visible_period() -> None:
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
     app.time_zoom = 4.0
@@ -170,6 +249,49 @@ def test_trigger_searches_extra_history_without_expanding_the_display_window() -
     assert search_count == 200
     assert app.signal_window_samples == 100
     np.testing.assert_array_equal(channel_1, np.arange(200))
+
+
+def test_triggered_plot_stays_phase_aligned_across_packet_boundaries() -> None:
+    count = 4096
+    period = 997
+    app = nr.ReceiverApp.__new__(nr.ReceiverApp)
+    app.frame_lock = threading.Lock()
+    app.sample_history = nr.SampleHistory(capacity=count * 3)
+    app.time_zoom = 1.0
+    app.time_pan = 0.0
+    app.signal_scripts_enabled = False
+    app.signal_resolution = Value("Medium")
+    app.trigger_enabled = Value(True)
+    app.trigger_channel = Value("CH1")
+    app.trigger_edge = Value("Rising")
+    app.trigger_level = Value("0")
+    app.trigger_status = Value("")
+    captures: list[np.ndarray] = []
+
+    for sequence in range(1, 6):
+        indices = np.arange((sequence - 1) * count, sequence * count)
+        samples = ((indices % period) - period // 2).astype(np.int16)
+        source = nr.SampleFrame(
+            1,
+            sequence,
+            1_000_000.0,
+            count,
+            0,
+            0,
+            0,
+            memoryview(samples),
+            None,
+        )
+        app.sample_history.append(source)
+        app.latest_frame = source
+        channel_1, _channel_2, _rate, visible = app._channels_for_signal(source)
+        if app.precomputed_trigger_index is not None:
+            assert visible == count
+            captures.append(np.asarray(channel_1).copy())
+
+    assert len(captures) == 4
+    for capture in captures[1:]:
+        np.testing.assert_allclose(capture, captures[0], atol=1e-9)
 
 
 def test_voltage_trigger_stays_armed_when_threshold_is_not_crossed() -> None:
@@ -298,7 +420,7 @@ def test_live_frames_feed_the_stateful_cluster_processor() -> None:
     assert error is None
     assert result is not None
     assert len(result.quadratures["a"]) == 4
-    assert set(result.nullifiers) == {"cluster_x", "cluster_p"}
+    assert set(result.nullifiers) == {"cluster_x"}
 
 
 def test_cluster_processor_reports_an_unsafe_sample_rate_without_stopping_stream() -> None:
@@ -313,4 +435,4 @@ def test_cluster_processor_reports_an_unsafe_sample_rate_without_stopping_stream
 
     result, error = app.cluster_snapshot()
     assert result is None
-    assert error is not None and "Nyquist" in error
+    assert error is not None and "at least 16" in error
