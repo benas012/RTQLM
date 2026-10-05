@@ -75,6 +75,9 @@ class DeviceTabsMixin:
             command=self.connect_selected,
             state=selection_state,
         )
+        self.redpitaya_menu.add_command(
+            label="Output signals…", command=self.open_output_signals, state=selection_state
+        )
         self.redpitaya_menu.add_command(label="Disconnect device", command=self.disconnect_selected)
         self.redpitaya_menu.add_command(label="Forget device…", command=self.forget_selected)
         self.redpitaya_menu.add_separator()

@@ -15,6 +15,7 @@ from apps.native_receiver.constants import (
     DEFAULT_SIGNAL_SCRIPT,
     DEFAULT_TIME_SPAN,
     FONTS,
+    TRIGGER_HYSTERESIS_VOLTS,
     UI_FRAME_INTERVAL_MS,
 )
 from apps.native_receiver.protocol import Device, SampleFrame, SampleHistory
@@ -69,6 +70,7 @@ class ReceiverStateMixin:
         self.trigger_channel = tk.StringVar(value="CH1")
         self.trigger_edge = tk.StringVar(value="Rising")
         self.trigger_level = tk.StringVar(value="0.0")
+        self.trigger_hysteresis = tk.StringVar(value=f"{TRIGGER_HYSTERESIS_VOLTS:g}")
         self.trigger_status = tk.StringVar(value="Trigger off")
         self.test_output_label = tk.StringVar(value="OUT1 sine")
         self.y_axis_range_label = tk.StringVar(value="Y range ±1.00 V")

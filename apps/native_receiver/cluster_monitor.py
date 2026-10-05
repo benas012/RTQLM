@@ -10,15 +10,16 @@ from typing import Any
 
 from apps.native_receiver.nullifier_acquisition import (
     AcquisitionWindowControls,
+    AnalysisControls,
     match_builtin_basis,
 )
 from apps.native_receiver.nullifier_renderer import PLOT_CHOICES, NullifierRendererMixin
 from quantum_light_engine.post_processing import (
-    DEFAULT_CLUSTER_P,
-    DEFAULT_CLUSTER_X,
     ClusterProcessingConfig,
     config_from_dict,
     config_to_dict,
+    lab_processing_config,
+    single_mode_processing_config,
 )
 
 REFRESH_INTERVAL_MS = 200
@@ -46,8 +47,8 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
                 "ch2": "#45c6e8",
             },
         )
-        self.title("Cluster-nullifier monitor")
-        self.geometry("1080x850")
+        self.title("Mode squeezing and nullifiers")
+        self.geometry("1080x920")
         self.minsize(960, 740)
         self.configure(bg=self.palette["bg"])
         self.transient(parent)
@@ -79,13 +80,13 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
 
         header = ttk.Frame(self, padding=(16, 14, 16, 8), style="Panel.TFrame")
         header.grid(row=0, column=0, sticky="ew")
-        ttk.Label(header, text="Cluster-nullifier monitor", style="Title.TLabel").grid(
+        ttk.Label(header, text="Mode squeezing and nullifiers", style="Title.TLabel").grid(
             row=0, column=0, sticky="w"
         )
         ttk.Label(
             header,
-            text="Both homodyne phases must match the selected x / p basis; "
-            "formulas remain editable.",
+            text="Single-mode measures each channel separately. Cluster formulas use the "
+            "selected homodyne x / p basis.",
             style="Muted.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
 
@@ -102,6 +103,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         self.minimum_samples = tk.StringVar()
         self.history_modes = tk.StringVar()
         self.mode_shape = tk.StringVar()
+        self.mode_oversample = tk.StringVar()
         self.variance_estimator = tk.StringVar()
         fields = (
             ("Mode width (µs)", self.mode_width_us),
@@ -111,6 +113,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
             ("Artifact reject |V| (optional)", self.gate_threshold),
             ("Minimum samples/mode", self.minimum_samples),
             ("Maximum modes/window", self.history_modes),
+            ("Template oversample", self.mode_oversample),
         )
         for index, (label, variable) in enumerate(fields):
             row, pair = divmod(index, 3)
@@ -123,7 +126,10 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         ttk.Combobox(
             controls,
             textvariable=self.mode_shape,
-            values=("gaussian_linear", "gaussian_linear_cosine"),
+            values=(
+                "identity", "gaussian_linear", "gaussian_linear_cosine",
+                "lab_gaussian_linear_cosine",
+            ),
             state="readonly",
             width=24,
         ).grid(row=3, column=1, columnspan=2, sticky="w", pady=3)
@@ -135,7 +141,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         ttk.Combobox(
             controls,
             textvariable=self.variance_estimator,
-            values=("ensemble", "rolling"),
+            values=("ensemble", "rolling", "lab_rolling"),
             state="readonly",
             width=24,
         ).grid(row=4, column=1, columnspan=2, sticky="w", pady=3)
@@ -148,17 +154,27 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         acquisition_frame.grid(row=1, column=0, sticky="ew", padx=16, pady=(4, 4))
         self.acquisition = AcquisitionWindowControls(acquisition_frame)
         self.acquisition.pack(fill="x")
+        self.analysis = AnalysisControls(acquisition_frame)
+        self.analysis.pack(fill="x", pady=(3, 0))
         ttk.Label(
             acquisition_frame,
             text="Periodic starts with locking. Triggered uses sampled CH1 / CH2, "
             "independently of the waveform display trigger.",
         ).pack(anchor="w", pady=(4, 0))
+        presets = ttk.Frame(acquisition_frame, style="Toolbar.TFrame")
+        presets.pack(anchor="w", pady=(4, 0))
         ttk.Button(
-            acquisition_frame,
-            text="Load selected 1D basis preset",
+            presets,
+            text="Load lab postprocessing preset",
             command=self._load_preset,
             style="Compact.TButton",
-        ).pack(anchor="w", pady=(4, 0))
+        ).pack(side="left")
+        ttk.Button(
+            presets,
+            text="Single-mode squeezing preset",
+            command=self._load_single_preset,
+            style="Compact.TButton",
+        ).pack(side="left", padx=(8, 0))
 
         editors = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         editors.grid(row=3, column=0, sticky="nsew", padx=16, pady=(0, 8))
@@ -174,7 +190,9 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         )
         self.mode_text.pack(fill="both", expand=True, padx=6, pady=6)
         editors.add(mode_frame, weight=1)
-        nullifier_frame = ttk.LabelFrame(editors, text="Nullifiers (JSON)")
+        nullifier_frame = ttk.LabelFrame(
+            editors, text="Cluster formulas (JSON; single-mode uses the selected channels)"
+        )
         self.nullifier_text = tk.Text(
             nullifier_frame,
             height=6,
@@ -239,8 +257,10 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         self.minimum_samples.set(str(config.min_samples_per_mode))
         self.history_modes.set(str(config.history_modes))
         self.mode_shape.set(str(data["modeShape"]))
+        self.mode_oversample.set(str(config.mode_oversample))
         self.variance_estimator.set(str(data["varianceEstimator"]))
         self.acquisition.load(config)
+        self.analysis.load(config)
         self.mode_text.delete("1.0", tk.END)
         self.mode_text.insert("1.0", json.dumps(data["explicitModeTemplate"]))
         self.nullifier_text.delete("1.0", tk.END)
@@ -261,20 +281,44 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
                 "explicitModeTemplate": json.loads(self.mode_text.get("1.0", tk.END)),
                 "nullifiers": json.loads(self.nullifier_text.get("1.0", tk.END)),
                 "modeShape": self.mode_shape.get(),
+                "modeOversample": int(self.mode_oversample.get()),
                 "varianceEstimator": self.variance_estimator.get(),
             }
         )
         self.acquisition.apply_to(data)
+        self.analysis.apply_to(data)
         return match_builtin_basis(config_from_dict(data))
 
     def _load_preset(self) -> None:
         basis = self.acquisition.variables["basis"].get()
-        preset = DEFAULT_CLUSTER_X if basis == "x" else DEFAULT_CLUSTER_P
-        config = replace(self.parent.cluster_processor.config, nullifiers=(preset,))
-        self.nullifier_text.delete("1.0", tk.END)
-        self.nullifier_text.insert(
-            "1.0", json.dumps(config_to_dict(config)["nullifiers"], indent=2)
-        )
+        config = lab_processing_config(basis)
+        self._load(config)
+
+    def _load_single_preset(self) -> None:
+        try:
+            current = self._config()
+            single = single_mode_processing_config(
+                mode_samples=current.mode_samples,
+                variance_window_modes=current.variance_window_modes or 100,
+            )
+            self._load(replace(
+                single,
+                measurement_basis=current.measurement_basis,
+                single_channel=current.single_channel,
+                window_mode=current.window_mode,
+                lock_seconds=current.lock_seconds,
+                collect_seconds=current.collect_seconds,
+                collection_guard_seconds=current.collection_guard_seconds,
+                collection_end_guard_samples=current.collection_end_guard_samples,
+                trigger_channel=current.trigger_channel,
+                trigger_edge=current.trigger_edge,
+                trigger_level_volts=current.trigger_level_volts,
+                trigger_delay_seconds=current.trigger_delay_seconds,
+                trigger_holdoff_seconds=current.trigger_holdoff_seconds,
+                trigger_hysteresis_volts=current.trigger_hysteresis_volts,
+            ))
+        except Exception as exc:
+            messagebox.showerror("Invalid squeezing configuration", str(exc), parent=self)
 
     def _apply(self) -> None:
         try:
@@ -286,17 +330,22 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
 
     def _start_calibration(self) -> None:
         try:
+            config = self._config()
+            if config != self.parent.cluster_processor.config:
+                self.parent.apply_cluster_config(config)
             self.parent.start_cluster_calibration()
-            self.status.set("Acquiring shot noise; switch to the shot-noise measurement")
+            self.status.set("Acquiring shot noise; keep the shot-noise measurement active")
         except Exception as exc:
             messagebox.showerror("Calibration error", str(exc), parent=self)
 
     def _finish_calibration(self) -> None:
         try:
             coefficients = self.parent.finish_cluster_calibration()
-            self.status.set(
-                f"Calibration complete: A x {coefficients['a']:.5g}, B x {coefficients['b']:.5g}"
+            channels = ", ".join(
+                f"{'CH1' if channel == 'a' else 'CH2'} x {value:.5g}"
+                for channel, value in coefficients.items()
             )
+            self.status.set(f"Calibration complete: {channels}")
         except Exception as exc:
             messagebox.showerror("Calibration error", str(exc), parent=self)
 

@@ -13,6 +13,7 @@ from redpitaya_acquisition.acquisition.source import AcquisitionSource
 from redpitaya_acquisition.config.settings import Settings as AcquisitionSettings
 from redpitaya_acquisition.domain.frame import RawSampleFrame
 from redpitaya_acquisition.domain.state import AcquisitionState
+from redpitaya_acquisition.redpitaya.output_signals import OutputSignalsConfig
 from redpitaya_acquisition.redpitaya.streaming_source import RedPitayaStreamingSource
 from redpitaya_acquisition.streaming.broadcaster import Broadcaster
 
@@ -90,6 +91,12 @@ class _PreparedSource(AcquisitionSource):
             frequency_hz=frequency_hz,
             amplitude_volts=amplitude_volts,
         )
+
+    async def set_output_signals(self, config: OutputSignalsConfig) -> None:
+        await self.source.set_output_signals(config)
+
+    def output_status(self) -> dict[str, object]:
+        return self.source.output_status()
 
     async def shutdown_remote_service(self) -> None:
         await self.source.shutdown_remote_service()
@@ -242,6 +249,30 @@ class DeviceSession:
                 "frequencyHz": frequency_hz,
                 "amplitudeVolts": amplitude_volts,
             }
+
+    async def set_output_signals(self, config: OutputSignalsConfig) -> dict[str, object]:
+        async with self._lock:
+            if self.profile.source is not DeviceSource.REDPITAYA:
+                raise RuntimeError("custom outputs are only available for Red Pitaya devices")
+            if self.state not in {DeviceSessionState.READY, DeviceSessionState.STREAMING}:
+                raise RuntimeError("connect the Red Pitaya before controlling outputs")
+            source = self._prepared_source or self.manager.source
+            if source is None:
+                raise RuntimeError("the active Red Pitaya source is unavailable")
+            await source.set_output_signals(config)
+            return source.output_status()
+
+    def output_status(self) -> dict[str, object]:
+        source = self._prepared_source or self.manager.source
+        if source is not None and self.state in {
+            DeviceSessionState.READY,
+            DeviceSessionState.STREAMING,
+        }:
+            return source.output_status()
+        return {
+            "state": "unavailable",
+            "config": OutputSignalsConfig().model_dump(mode="json", by_alias=True),
+        }
 
     def status(self) -> dict[str, Any]:
         base = self.manager.status().model_dump(mode="json", by_alias=True)

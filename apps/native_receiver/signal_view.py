@@ -48,6 +48,7 @@ class SignalViewMixin:
     def _channels_for_signal(self, frame: SampleFrame) -> tuple[Any, Any, float, int]:
         self.signal_padding_samples = 0
         self.trigger_window_precomputed = False
+        self.signal_sample_positions = None
         self.precomputed_trigger_index: float | None = None
         requested = min(HISTORY_MAX_SAMPLES, int(frame.samples_per_channel / self.time_zoom))
         self.signal_window_samples = requested
@@ -62,6 +63,7 @@ class SignalViewMixin:
             trigger_channel_variable = self.__dict__.get("trigger_channel")
             trigger_edge_variable = self.__dict__.get("trigger_edge")
             trigger_level = float("nan")
+            hysteresis = self._trigger_hysteresis_volts()
             if trigger_level_variable is not None:
                 try:
                     trigger_level = float(trigger_level_variable.get().strip())
@@ -78,9 +80,10 @@ class SignalViewMixin:
                         trigger_edge_variable.get(),
                         TRIGGER_PRE_SAMPLES_FRACTION,
                         self._signal_plot_points(),
-                        TRIGGER_HYSTERESIS_VOLTS * ADC_COUNTS_PER_VOLT,
+                        hysteresis * ADC_COUNTS_PER_VOLT,
                     )
                     if np.isfinite(trigger_level)
+                    and np.isfinite(hysteresis) and hysteresis >= 0
                     and trigger_channel_variable is not None
                     and trigger_edge_variable is not None
                     else None
@@ -93,6 +96,7 @@ class SignalViewMixin:
             if capture is not None:
                 self.trigger_window_precomputed = True
                 self.precomputed_trigger_index = capture.trigger_index
+                self.signal_sample_positions = capture.sample_positions
                 if capture.trigger_index is None:
                     edge_symbol = "↑" if self.trigger_edge.get() == "Rising" else "↓"
                     set_if_changed(
@@ -120,6 +124,15 @@ class SignalViewMixin:
             self.signal_padding_samples = max(0, requested - frame.samples_per_channel)
             return first, second, frame.sample_rate_hz, requested
         return first, second, frame.sample_rate_hz, frame.samples_per_channel
+
+    def _trigger_hysteresis_volts(self) -> float:
+        variable = self.__dict__.get("trigger_hysteresis")
+        if variable is None:
+            return TRIGGER_HYSTERESIS_VOLTS
+        try:
+            return float(variable.get().strip())
+        except ValueError:
+            return float("nan")
 
     def _resize_signal_plot(self, _event: tk.Event[Any]) -> None:
         if self.signal_resize_after_id is not None:
@@ -203,6 +216,10 @@ class SignalViewMixin:
         if not np.isfinite(level):
             set_if_changed(self.trigger_status, "Enter a finite voltage")
             return nominal_start, nominal_end, None
+        hysteresis = self._trigger_hysteresis_volts()
+        if not np.isfinite(hysteresis) or hysteresis < 0:
+            set_if_changed(self.trigger_status, "Noise guard must be finite and nonnegative")
+            return nominal_start, nominal_end, None
 
         source = channel_1 if self.trigger_channel.get() == "CH1" else channel_2
         if source is None or len(source) < 2:
@@ -239,6 +256,7 @@ class SignalViewMixin:
                         self.trigger_edge.get(),
                         target_index=desired_data_index,
                         minimum_index=max(minimum_data_index, 1),
+                        hysteresis=hysteresis * ADC_COUNTS_PER_VOLT,
                     )
                 if raw_index is not None:
                     logical_index = padding + raw_index
@@ -250,6 +268,7 @@ class SignalViewMixin:
                 target_index=desired_source_index,
                 minimum_index=max(minimum_source_index, 1),
                 maximum_index=desired_source_index,
+                hysteresis=hysteresis,
             )
             if source_index is not None:
                 logical_index = padding + round(

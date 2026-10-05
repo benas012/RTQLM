@@ -63,15 +63,18 @@ def test_stable_two_channel_preset_sets_balanced_speed() -> None:
     assert app.acquisition_decimation.get() == "1024"
     assert app.acquisition_block_size.get() == "32768"
     assert app.acquisition_rate.get() == "Sample rate: 122.07 kHz"
-    assert app.acquisition_batch.get() == "Batch: 67 ms · 2 ch"
+    assert app.acquisition_batch.get() == "Batch: 134 ms · 2 ch"
     assert applied == [True]
 
 
-def test_acquisition_batch_estimate_uses_enabled_channels() -> None:
+def test_acquisition_batch_size_is_per_channel() -> None:
     device = nr.Device("id", "RP", "rp.local", "ready", True, False, 1024, 32768)
     assert nr.acquisition_channel_count(device) == 1
-    assert nr.acquisition_batch_seconds(32768, 2, 122_070.3125) == pytest.approx(0.067108864)
-    assert nr.format_duration(0.067108864) == "67 ms"
+    for channels in (1, 2):
+        assert nr.acquisition_batch_seconds(32768, channels, 122_070.3125) == pytest.approx(
+            0.134217728
+        )
+    assert nr.format_duration(0.134217728) == "134 ms"
 
 
 @pytest.mark.parametrize("decimation", [1, 64, 256, 1024, 8192, 65536])

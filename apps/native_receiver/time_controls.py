@@ -229,6 +229,10 @@ class TimeControlsMixin:
         if not np.isfinite(level):
             set_if_changed(self.trigger_status, "Enter a finite voltage")
             return
+        hysteresis = self._trigger_hysteresis_volts()
+        if not np.isfinite(hysteresis) or hysteresis < 0:
+            set_if_changed(self.trigger_status, "Noise guard must be finite and nonnegative")
+            return
         edge_symbol = "↑" if self.trigger_edge.get() == "Rising" else "↓"
         set_if_changed(
             self.trigger_status,
@@ -240,5 +244,6 @@ class TimeControlsMixin:
             channel=self.trigger_channel.get(),
             edge=self.trigger_edge.get().lower(),
             level_volts=level,
+            hysteresis_volts=hysteresis,
         )
         self._redraw_latest_signal()

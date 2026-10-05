@@ -1,5 +1,10 @@
 # Receiver nullifiers and sample-hold acquisition
 
+For the three-step **single-mode squeezing** measurement, use **Single-mode preset**
+and follow [the single-mode guide](single-mode-squeezing.md). It includes the
+function-by-function comparison with the supplied lab script, full-trace
+shot-noise calibration, and the 100-mode rolling variance setting.
+
 The receiver's analysis area contains **Spectrum analyzer** and **Nullifiers** tabs. Nullifiers are
 calculated from both raw acquired channels before waveform rendering, display downsampling, channel
 visibility, offsets or optional display scripts. All received packets are processed even when the
@@ -7,7 +12,64 @@ display refreshes less often. Choose variance across repeated collection windows
 or a live rolling diagnostic of neighboring modes in the selected measurement basis. The graph
 alone is not an entanglement certificate.
 
-## Scientific reference and 1D preset
+## Lab postprocessing method (receiver default)
+
+The receiver now defaults to the active methods in the supplied lab `postprocessing.py` script:
+
+```text
+mode width = 308 ns, measurement-frequency parameter = 6e6, oversample = 1000
+X: (A[k] + A[k+1]) + (B[k] - B[k+1]), starting at k=0
+P: (A[k] - A[k+1]) + (B[k] + B[k+1]), starting at k=1
+```
+
+Use **Use lab 1D preset** in the Nullifiers tab to apply the full method. It preserves the tab's
+collection/trigger schedule and resets calibration. Only the selected physically measured basis
+is calculated. Both formulas remain editable. Generic processor paper defaults remain available;
+the receiver selects the lab method explicitly.
+
+`lab_gaussian_linear_cosine` reproduces the script's Gaussian times linear times cosine shape.
+The cosine is **cos(t * meas_freq)**, while the Gaussian uses **2*pi*meas_freq**. This preserves
+the supplied convention. Fine-grid coefficients are normalized before interpolation;
+the interpolated template is not normalized again. Oversampling creates coefficients, not new
+ADC measurements. Template length is **int(mode_width / dt)**: at 125 MS/s it has 38 samples
+(304 ns); at 15.625 MS/s it has 4 samples (256 ns). The graph reports the actual tiled period.
+This compatibility method does not implement a fractional 308 ns optical grid; validate actual
+timing before interpreting long acquisitions.
+
+The lab preset minimum is **4 samples per mode**, configurable in Configure. This permits
+low-rate experiments; it is not a scientific accuracy guarantee. The older paper/API minimum
+remains 16. The lab method does not impose a hard Nyquist cutoff from the Gaussian's frequency
+parameter, since that function is not band limited. Anti-alias filtering and measurement accuracy
+must be validated with recorded data.
+
+The script shifts B forward by two samples relative to A. The preset retains **B delay = 2**;
+measure the actual hardware delay when changing ADC rate or setup. Both vacuum and signal data
+use the same delay and mode coefficients.
+
+The requested cycle remains **5 ms lock / 5 ms collect**. The lab's extra exclusion is configurable:
+**0.8006 ms start guard** (`6e-7 + 40*20e-6`) and **1000 samples end guard**. These trim valid
+collection inside each cycle; they do not lengthen the cycle. Configure exposes both guards.
+The lab's retrospective `0.99 * trace.max()` lock detection is not applied to live quantum data:
+periodic or sampled-edge acquisition controls select the experiment interval. Digital lab-controller
+timing still requires acquisition-backend support.
+
+Shot-noise calibration uses the equal-weight mean of each admitted segment's population variance,
+then multiplies each rail by `1/sqrt(2*mean_variance)`, matching the script. A continuous acquisition
+is one segment. Collection segments are tracked independently of packet fragmentation.
+
+`lab_rolling` uses `max(int(varianceWindowSeconds / actual_mode_period), 10)` neighboring mode values.
+Centered slices match the script's `i-half:i+half` convention, including odd-window behavior.
+Population variance is computed in each segment, converted to dB with preset shot-noise variance 2,
+then **dB traces are averaged equally across completed segments at each index**. This matches an
+average of dB values, not dB of average variance and not ensemble variance across shots. The first
+incomplete window is a live preview; completed-window averages take over after it closes. Counts
+show contributing segments. History bounds retain a prefix of each segment and report truncation.
+Continuous mode shows only a rolling preview until a collection boundary exists.
+
+Configuration, calibration and stream changes clear these averages. Keep different physical bases
+separate. Zero variance is negative infinity in dB; the chart does not draw non-finite values.
+
+## Paper reference and alternative 1D preset
 
 The reference is Mikkel Vilsboll Larsen, *Continuous Variable Cluster State Computation* (DTU, 2021),
 chapter 3. Section 3.4.2.2, printed page 37 (PDF page 50), gives the unnumbered 1D expressions:
@@ -156,22 +218,25 @@ on-board coefficients without evaluating arbitrary injected code.
 | `windowMode` | `periodic`, `continuous`, `triggered` | `periodic` |
 | `lockSeconds`, `collectSeconds` | seconds | `0.005`, `0.005` |
 | `measurementBasis` | `x`, `p` | `x` |
-| `varianceEstimator` | `ensemble` across aligned windows; `rolling` across neighboring modes | `ensemble` |
+| `varianceEstimator` | `lab_rolling`, `ensemble`, `rolling` | `lab_rolling` |
 | `triggerChannel`, `triggerEdge` | `a`/`b`, `rising`/`falling` | `a`, `rising` |
 | `triggerLevelVolts`, `triggerHysteresisVolts` | volts | `0`, `0` |
 | `triggerDelaySeconds` | seconds after accepted edge | `0` |
 | `triggerHoldoffSeconds` | minimum seconds between accepted edges | `0.010` |
-| `modeShape` | `gaussian_linear`, `gaussian_linear_cosine` | `gaussian_linear` |
-| `modeWidthSeconds` | seconds per temporal mode | `247e-9` |
-| `measurementFrequencyHz` | `kappa/(2*pi)` for paper shape; carrier for cosine shape | `2.7e6` |
+| `modeShape` | `lab_gaussian_linear_cosine`, `gaussian_linear`, `gaussian_linear_cosine` | `lab_gaussian_linear_cosine` |
+| `modeWidthSeconds` | seconds per nominal temporal mode | `308e-9` |
+| `measurementFrequencyHz` | lab parameter; `kappa/(2*pi)` for paper shape | `6e6` |
 | `explicitModeTemplate` | discrete finite nonzero samples, overrides analytic shape | `[]` |
-| `channelBDelaySamples` | positive pairs A[n] with B[n+delay] | `0` |
+| `channelBDelaySamples` | positive pairs A[n] with B[n+delay] | `2` |
 | `varianceWindowSeconds` | rolling window inside each collect segment | `1/3000` |
-| `minSamplesPerMode`, `historyModes` | counts | `16`, `25000` |
+| `minSamplesPerMode`, `historyModes` | counts | `4`, `25000` |
+| `modeOversample` | fine-grid coefficient samples per ADC interval | `1000` |
+| `collectionGuardSeconds` | start settling exclusion inside collect interval | `0.0008006` |
+| `collectionEndGuardSamples` | exclusion before next lock | `1000` |
 
 Trigger holdoff is measured from the accepted edge; edges during the trigger delay or active
 collection are ignored. The generic processor API defaults to continuous/rolling processing for
-callers without receiver settings; the desktop receiver selects the lab schedule and ensemble
+callers without receiver settings; the desktop receiver selects the lab schedule and `lab_rolling`
 estimation. In continuous mode there is only one collection window, so use rolling estimation or
 select periodic/triggered collection to obtain repeated-window variances.
 
@@ -180,7 +245,7 @@ The receiver's 25,000-mode default covers a full 5 ms collection at 125 MS/s and
 Increase the limit for longer windows if needed. The rolling estimator retains recent modes instead.
 
 When loading an old receiver configuration that exactly matches the previous built-in preset,
-the receiver migrates it in memory to the corrected paper preset and lab schedule. Arbitrary custom
+the receiver migrates it in memory to the lab preset and lab schedule. Arbitrary custom
 formulas are preserved, and their missing analytic shape is treated as the legacy cosine shape.
 The file is saved only when configuration is applied.
 

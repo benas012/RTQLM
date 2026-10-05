@@ -199,6 +199,9 @@ class WaveformRendererMixin:
             trace_left,
             plot_points,
             tag="signal_ch1",
+            sample_positions=self.__dict__.get("signal_sample_positions")
+            if self.__dict__.get("trigger_window_precomputed", False) else None,
+            sample_span=visible_samples,
         )
         draw_channel(
             self.canvas,
@@ -210,6 +213,9 @@ class WaveformRendererMixin:
             trace_left,
             plot_points,
             tag="signal_ch2",
+            sample_positions=self.__dict__.get("signal_sample_positions")
+            if self.__dict__.get("trigger_window_precomputed", False) else None,
+            sample_span=visible_samples,
         )
         if trigger_index is not None:
             trigger_x = left_pad + (

@@ -12,6 +12,7 @@ from quantum_light_engine.devices.discovery import SavedProfileDiscovery
 from quantum_light_engine.devices.models import DeviceProfileCreate, DeviceProfileUpdate
 from quantum_light_engine.devices.session import DeviceSession
 from quantum_light_engine.devices.session_manager import DeviceSessionManager
+from redpitaya_acquisition.redpitaya.output_signals import OutputSignalsConfig
 
 router = APIRouter(prefix="/api/v1/devices")
 
@@ -154,6 +155,40 @@ async def set_test_output_sine(
             str(exc),
             device_id,
         ) from exc
+
+
+@router.get("/{device_id}/outputs")
+async def get_outputs(request: Request, device_id: UUID) -> dict[str, object]:
+    return _session(request, device_id).output_status()
+
+
+@router.put("/{device_id}/outputs")
+async def configure_outputs(
+    request: Request, device_id: UUID, config: OutputSignalsConfig
+) -> dict[str, object]:
+    try:
+        return await _session(request, device_id).set_output_signals(config)
+    except RuntimeError as exc:
+        detail = str(exc)
+        if "connect the Red Pitaya" in detail or "only available" in detail:
+            raise state_conflict(device_id, detail) from exc
+        raise EngineApiError(
+            "outputs-unavailable", "Outputs unavailable", 503, detail, device_id
+        ) from exc
+    except Exception as exc:
+        raise EngineApiError(
+            "outputs-unavailable", "Outputs unavailable", 503, str(exc), device_id
+        ) from exc
+
+
+@router.post("/{device_id}/outputs/stop")
+async def stop_outputs(request: Request, device_id: UUID) -> dict[str, object]:
+    config = OutputSignalsConfig.model_validate(
+        _session(request, device_id).output_status()["config"]
+    )
+    config.output1.enabled = False
+    config.output2.enabled = False
+    return await configure_outputs(request, device_id, config)
 
 
 @router.get("/{device_id}/status")

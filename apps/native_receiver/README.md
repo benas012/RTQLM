@@ -44,9 +44,12 @@ pacing, FFT spectra and acquisition controls. The analysis area has **Spectrum a
 **Nullifiers** tabs. The Nullifiers tab shows a configurable live 1D graph, collection controls and
 shot-noise calibration, with advanced temporal-template and formula settings.
 
-New receiver configurations default to **5 ms locking / 5 ms collecting**, with variance at each
-temporal index across repeated, aligned collection windows. Rolling variance across neighboring modes
-is also available. Continuous, periodic and sampled-edge-triggered collection modes are available.
+New receiver configurations default to the supplied **lab postprocessing method**: 308 ns,
+6e6 frequency parameter, Gaussian-linear-cosine weighting, lab X/P signs, per-segment vacuum
+calibration and rolling variances averaged in dB across completed windows. The minimum is configurable
+and defaults to 4 samples/mode; this permits testing, not guaranteed measurement accuracy.
+The **5 ms locking / 5 ms collecting** cycle includes configurable 0.8006 ms start and 1000-sample
+end settling guards. Continuous, periodic and sampled-edge-triggered collection modes are available.
 Set the measured X/P basis to match both
 homodyne detectors and calibrate against shot noise before interpreting dB. The paper preset follows
 Larsen chapter 3's 1D signs and Gaussian-linear mode. Only complete modes in collection windows are
@@ -58,11 +61,22 @@ limitations, sample-rate requirements, and the recommended FPGA/Red Pitaya proce
 The current analog trigger is independent of the waveform display trigger; external TTL acquisition
 requires board/backend support. Stored custom configurations are retained, so review their formulas,
 mode shape and timing when upgrading from the earlier monitor. The exact previous built-in preset
-migrates in memory to the corrected paper preset; custom formulas are retained.
+migrates in memory to the lab preset; custom formulas are retained.
 
 Optional Python signal scripts are disabled by default. Set `QL_NATIVE_RECEIVER_SIGNAL_SCRIPT=1` before
 launch to enable the editor. Scripts execute in the receiver process against live NumPy arrays. The
 restricted built-in set is a convenience guard, not a secure sandbox: run only code you trust.
+
+The waveform display trigger detects the selected rising or falling edge in raw samples before
+downsampling. **Noise guard** defaults to 0.01 V: a rising edge must start below `level - guard`
+and reach `level + guard`; falling edges reverse those bounds. The displayed time remains the
+crossing of the selected level. Lower the guard for small signals, or raise it if noise triggers
+the display. A missing qualified edge holds the last capture. Sample-loss boundaries and stream
+changes reset raw history so a discontinuity cannot create a false edge. The selected edge pair
+is plotted at its actual sample positions; zoom in when a wide view cannot resolve fast cycles.
+After a history reset, a valid edge can trigger immediately: unavailable portions of the selected
+time window stay blank. Noise-guard arming and confirmation use adjacent available samples even
+when those samples lie outside the allowed edge positions within the display window.
 
 ## Code organization
 
@@ -94,3 +108,12 @@ decoding, and post-processing:
 ```powershell
 uv run pytest -q tests/unit/test_native_receiver_*.py tests/e2e
 ```
+
+## Output signals
+
+Use **Outputs…**, **Signal > Red Pitaya output signals…**, or **Red Pitayas > Output signals…** for
+the selected connected board. The editor controls OUT1 and OUT2 together with separate waveforms,
+frequencies, peak amplitudes, offsets and phases. It supports normalized custom sample files and
+the lab X/P cancellation presets. Closing the editor leaves outputs running; Stop both outputs
+stops that board's pair. See [the output signal guide](../../docs/output-signals.md).
+

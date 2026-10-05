@@ -28,6 +28,16 @@ from .native_worker import (
     isolated_client_is_version_3,
     should_isolate_native_client,
 )
+from .output_control import close_board_output_control, stop_board_outputs
+from .output_signals import (
+    OutputChannelConfig,
+    OutputSignalsConfig,
+    build_output_buffers,
+    dac_memory_size,
+    start_dac_memory,
+    start_output_signals,
+    stop_output_signals,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +65,13 @@ class RedPitayaStreamingSource(AcquisitionSource):
         self._adapter: StreamingCompatibility | None = None
         self._callback: Any = None
         self._test_output_client: Any = None
+        self._output_client: Any = None
+        self._output_config = OutputSignalsConfig()
+        self._output_state = "inactive"
         self._native_worker: NativeStreamingWorker | None = None
         self._isolate_native_client = should_isolate_native_client(settings.streaming_module)
         self._isolated_client_is_version_3 = (
-            self._isolate_native_client
-            and isolated_client_is_version_3(settings.streaming_module)
+            self._isolate_native_client and isolated_client_is_version_3(settings.streaming_module)
         )
         self._module_name: str | None = None
         self._module_path: str | None = None
@@ -276,6 +288,14 @@ class RedPitayaStreamingSource(AcquisitionSource):
 
     async def disconnect(self) -> None:
         self._running = False
+        if self._native_worker is None and not self._connection_lost:
+            if self._output_client is not None:
+                await asyncio.to_thread(
+                    stop_board_outputs, self._config_client, self._settings.host
+                )
+            await asyncio.to_thread(self._stop_output_signals)
+        self._output_config = OutputSignalsConfig()
+        self._output_state = "inactive"
         worker, self._native_worker = self._native_worker, None
         if worker is not None:
             await worker.close()
@@ -283,6 +303,7 @@ class RedPitayaStreamingSource(AcquisitionSource):
             self._connection_lost = False
             return
         if self._connection_lost:
+            self._output_client = None
             self._test_output_client = None
         else:
             await self.set_test_output1_sine(
@@ -292,6 +313,7 @@ class RedPitayaStreamingSource(AcquisitionSource):
             )
         if self._adapter is not None and not self._connection_lost:
             await asyncio.to_thread(self._adapter.disconnect)
+        await asyncio.to_thread(close_board_output_control, self._config_client)
         self._adapter = None
         self._client = None
         self._config_client = None
@@ -303,6 +325,46 @@ class RedPitayaStreamingSource(AcquisitionSource):
             return
         await asyncio.to_thread(request_streaming_app_stop, self._settings.host)
 
+    def output_status(self) -> dict[str, object]:
+        _, metadata = build_output_buffers(self._output_config, include_buffers=False)
+        return {
+            "state": self._output_state,
+            "config": self._output_config.model_dump(mode="json", by_alias=True),
+            **metadata,
+        }
+
+    async def set_output_signals(self, config: OutputSignalsConfig) -> None:
+        self._output_state = "unknown"
+        try:
+            if self._native_worker is not None:
+                await self._native_worker.set_output_signals(config)
+            else:
+                await asyncio.to_thread(self._apply_output_signals, config)
+        except Exception:
+            self._output_config = OutputSignalsConfig()
+            raise
+        self._output_config = config.model_copy(deep=True)
+        self._output_state = (
+            "running" if config.output1.enabled or config.output2.enabled else "inactive"
+        )
+
+    def _stop_output_signals(self) -> None:
+        client, self._output_client = self._output_client, None
+        stop_output_signals(client)
+
+    def _apply_output_signals(self, config: OutputSignalsConfig) -> None:
+        stop_board_outputs(self._config_client, self._settings.host)
+        self._stop_output_signals()
+        self._stop_test_output1_sine()
+        if not (config.output1.enabled or config.output2.enabled):
+            return
+        if self._library is None or self._adapter is None:
+            raise RuntimeError("custom outputs require an active Red Pitaya streaming connection")
+        self._output_client = start_output_signals(
+            self._library.module, self._adapter, self._config_client, config,
+            block_size_bytes=self._settings.block_size_bytes,
+        )
+
     async def set_test_output1_sine(
         self,
         enabled: bool,
@@ -310,13 +372,29 @@ class RedPitayaStreamingSource(AcquisitionSource):
         frequency_hz: float,
         amplitude_volts: float,
     ) -> None:
+        self._output_config = OutputSignalsConfig()
+        self._output_state = "unknown"
         if self._native_worker is not None:
             await self._native_worker.set_test_output1_sine(
                 enabled,
                 frequency_hz=frequency_hz,
                 amplitude_volts=amplitude_volts,
             )
+            self._output_state = "inactive"
+            self._remember_test_output(enabled, frequency_hz, amplitude_volts)
             return
+        module = self._library.module if self._library is not None else None
+        if self._output_client is not None or (
+            hasattr(module, "DACCallback")
+            and (
+                (enabled and self._test_output_client is None)
+                or (self._test_output_client is not None and not enabled)
+            )
+        ):
+            await asyncio.to_thread(stop_board_outputs, self._config_client, self._settings.host)
+        await asyncio.to_thread(self._stop_output_signals)
+        self._output_config = OutputSignalsConfig()
+        self._output_state = "inactive"
         if enabled:
             await asyncio.to_thread(
                 self._start_test_output1_sine,
@@ -325,6 +403,25 @@ class RedPitayaStreamingSource(AcquisitionSource):
             )
         else:
             await asyncio.to_thread(self._stop_test_output1_sine)
+        self._remember_test_output(enabled, frequency_hz, amplitude_volts)
+
+    def _remember_test_output(self, enabled: bool, frequency: float, amplitude: float) -> None:
+        if not enabled:
+            return
+        sample_count = max(64, round(TEST_OUTPUT_DAC_RATE_HZ * 64 / frequency / 64) * 64)
+        if sample_count > 262_144 or sample_count <= 128:
+            self._output_state = "legacy-test"
+            return
+        self._output_config = OutputSignalsConfig(
+            sample_rate_hz=TEST_OUTPUT_DAC_RATE_HZ,
+            buffer_samples=sample_count,
+            output1=OutputChannelConfig(
+                enabled=True,
+                frequency_hz=64 * TEST_OUTPUT_DAC_RATE_HZ / sample_count,
+                amplitude_volts=amplitude,
+            ),
+        )
+        self._output_state = "legacy-test"
 
     def _start_test_output1_sine(self, frequency_hz: float, amplitude_volts: float) -> None:
         if self._test_output_client is not None:
@@ -345,7 +442,7 @@ class RedPitayaStreamingSource(AcquisitionSource):
             for key, value in (
                 ("dac_pass_mode", "DAC_NET"),
                 ("dac_rate", str(TEST_OUTPUT_DAC_RATE_HZ)),
-                ("dac_size", str(TEST_OUTPUT_DAC_BUFFER_SIZE_BYTES)),
+                ("dac_size", str(dac_memory_size(self._settings.block_size_bytes))),
             ):
                 try:
                     result = self._config_client.sendConfig(host, key, value)
@@ -366,13 +463,10 @@ class RedPitayaStreamingSource(AcquisitionSource):
             samples = (np.sin(phase) * peak_counts).astype(np.int16).tolist()
             _require_success("load OUT1 sine buffer", dac_client.setMemory16Bit(1, samples))
             dac_client.setRepeatInf(True)
-            _require_success(
-                "start OUT1 DAC stream",
-                dac_client.startStreamingFromMemory(host),
-            )
+            start_dac_memory(module, dac_client, host, (1,), self._config_client)
         except Exception:
             try:
-                dac_client.notifyStop()
+                stop_output_signals(dac_client)
             except Exception:
                 pass
             raise
@@ -380,14 +474,7 @@ class RedPitayaStreamingSource(AcquisitionSource):
 
     def _stop_test_output1_sine(self) -> None:
         client, self._test_output_client = self._test_output_client, None
-        if client is None:
-            return
-        try:
-            if hasattr(client, "stopStreaming"):
-                client.stopStreaming()
-        finally:
-            client.notifyStop()
-        client.wait()
+        stop_output_signals(client)
 
     async def frames(self) -> AsyncIterator[RawSampleFrame]:
         while self._running:

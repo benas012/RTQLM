@@ -6,6 +6,7 @@ import threading
 from tkinter import messagebox
 from typing import Any
 
+import numpy as np
 import websockets
 
 from apps.native_receiver.constants import (
@@ -58,7 +59,9 @@ class StreamControllerMixin:
         try:
             UI_LOGGER.info("sample socket connecting url=%s", url)
             self.events.put(("status", "connecting socket"))
-            async with websockets.connect(url, max_size=None) as websocket:
+            # Raw ADC frames are high-rate binary data. Deflate can stall the
+            # engine's event loop and backpressure the board into dropping samples.
+            async with websockets.connect(url, max_size=None, compression=None) as websocket:
                 UI_LOGGER.info("sample socket connected url=%s", url)
                 self.events.put(("status", "connected"))
                 while not self.stop_event.is_set():
@@ -93,20 +96,48 @@ class StreamControllerMixin:
             self.events.put(("socket_closed", None))
 
     def _process_cluster_frame(self, frame: SampleFrame) -> None:
-        if frame.channel_1 is None or frame.channel_2 is None:
-            with self.cluster_lock:
+        with self.cluster_lock:
+            config = self.cluster_processor.config
+            selected = config.single_channel if config.analysis_mode == "single" else "both"
+            requires_a = selected in {"a", "both"}
+            requires_b = selected in {"b", "both"}
+            missing_input = ((requires_a and frame.channel_1 is None)
+                             or (requires_b and frame.channel_2 is None))
+            trigger_input = frame.channel_1 if config.trigger_channel == "a" else frame.channel_2
+            missing_trigger = config.window_mode == "triggered" and trigger_input is None
+            if missing_input or missing_trigger:
                 self.cluster_processor.reset_stream()
-                self.cluster_error = "Cluster processing requires both CH1 and CH2"
+                if not missing_input:
+                    channel = "CH1" if config.trigger_channel == "a" else "CH2"
+                    self.cluster_error = (
+                        f"Triggered acquisition requires sampled trigger input {channel}"
+                    )
+                elif selected == "both":
+                    calculation = (
+                        "Single-mode squeezing" if config.analysis_mode == "single"
+                        else "Cluster processing"
+                    )
+                    self.cluster_error = f"{calculation} requires both CH1 and CH2"
+                else:
+                    channel = "CH1" if selected == "a" else "CH2"
+                    self.cluster_error = f"Single-mode squeezing requires {channel}"
                 self.latest_cluster_result = None
                 self.cluster_last_sequence = None
                 self.cluster_last_frame = None
-            return
-        channel_a = adc_counts_to_volts(frame.channel_1)
-        channel_b = adc_counts_to_volts(frame.channel_2)
-        if channel_a is None or channel_b is None:
-            return
-        with self.cluster_lock:
+                return
+            channel_a = adc_counts_to_volts(frame.channel_1)
+            channel_b = adc_counts_to_volts(frame.channel_2)
+            if channel_a is None:
+                channel_a = np.zeros(frame.samples_per_channel, dtype=np.float64)
+            if channel_b is None:
+                channel_b = np.zeros(frame.samples_per_channel, dtype=np.float64)
             previous = self.__dict__.get("cluster_last_frame")
+            fpga_loss = (
+                bool(frame.fpga_lost_ch1 or frame.fpga_lost_ch2)
+                if previous is None or frame.stream_id != previous.stream_id else
+                (frame.fpga_lost_ch1 != previous.fpga_lost_ch1
+                 or frame.fpga_lost_ch2 != previous.fpga_lost_ch2)
+            )
             discontinuity = bool(frame.flags & 0b11) or (
                 self.cluster_last_sequence is not None and (
                     frame.sequence != self.cluster_last_sequence + 1
@@ -121,6 +152,13 @@ class StreamControllerMixin:
             )
             self.cluster_last_sequence = frame.sequence
             self.cluster_last_frame = frame
+            if fpga_loss:
+                # The vendor does not locate gaps within a delivered buffer.
+                # Discard the whole affected packet and isolate both its boundaries.
+                self.cluster_processor.reset_stream()
+                self.latest_cluster_result = None
+                self.cluster_error = "FPGA samples lost: packet excluded; awaiting continuous data"
+                return
             if discontinuity:
                 self.latest_cluster_result = None
             try:

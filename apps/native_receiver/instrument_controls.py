@@ -15,6 +15,15 @@ from apps.native_receiver.helpers import (
 
 
 class InstrumentControlsMixin:
+    def open_output_signals(self) -> None:
+        device = self.selected_device
+        if device is None:
+            messagebox.showerror("No Red Pitaya", "Select and connect a Red Pitaya first.")
+            return
+        from apps.native_receiver.output_signals import OutputSignalDialog
+
+        OutputSignalDialog(self, device)
+
     def toggle_test_output(self) -> None:
         enable = not self.test_output_enabled
         device = self.selected_device
@@ -40,6 +49,7 @@ class InstrumentControlsMixin:
                 "POST",
                 f"/api/v1/devices/{target_device_id}/outputs/1/test-sine",
                 {"enabled": enable},
+                timeout_seconds=30,
             )
             if not isinstance(result, dict):
                 raise ApiError("The acquisition engine returned an invalid OUT1 response.")

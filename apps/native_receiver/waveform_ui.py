@@ -257,6 +257,16 @@ class WaveformUiMixin:
         ttk.Label(self.trigger_control_group, text="V", style="Toolbar.TLabel").pack(
             side="left", padx=(0, 6)
         )
+        ttk.Label(self.trigger_control_group, text="Noise guard", style="Toolbar.TLabel").pack(
+            side="left"
+        )
+        trigger_guard_entry = ttk.Entry(
+            self.trigger_control_group, textvariable=self.trigger_hysteresis, width=6,
+        )
+        trigger_guard_entry.pack(side="left", padx=(5, 3))
+        ttk.Label(self.trigger_control_group, text="V", style="Toolbar.TLabel").pack(
+            side="left", padx=(0, 6)
+        )
         ttk.Button(
             self.trigger_control_group,
             text="Apply",
@@ -270,6 +280,12 @@ class WaveformUiMixin:
             command=self.toggle_test_output,
         )
         self.test_output_button.pack(side="left", padx=(0, 8))
+        ttk.Button(
+            self.display_control_group,
+            text="Outputs…",
+            style="Compact.TButton",
+            command=self.open_output_signals,
+        ).pack(side="left", padx=(0, 8))
         ttk.Label(
             self.trigger_control_group,
             textvariable=self.trigger_status,
@@ -282,6 +298,8 @@ class WaveformUiMixin:
         trigger_edge_box.bind("<<ComboboxSelected>>", lambda _event: self.apply_trigger_settings())
         trigger_level_entry.bind("<Return>", lambda _event: self.apply_trigger_settings())
         trigger_level_entry.bind("<FocusOut>", lambda _event: self.apply_trigger_settings())
+        trigger_guard_entry.bind("<Return>", lambda _event: self.apply_trigger_settings())
+        trigger_guard_entry.bind("<FocusOut>", lambda _event: self.apply_trigger_settings())
         self.waveform_more_button = ttk.Button(
             self.signal_controls,
             text="Vertical & channel controls ▾",

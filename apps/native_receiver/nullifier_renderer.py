@@ -18,13 +18,17 @@ def select_nullifier_traces(
 ) -> tuple[Mapping[str, Any], str, bool]:
     """Choose a scientifically labelled quantity, without treating amplitude as variance."""
     if choice == "Squeezing (dB)" or (choice == "Auto" and result.calibrated):
-        return result.squeezing_db, "dB relative to shot noise", True
+        unit = ("mean window dB relative to shot noise"
+                if result.variance_estimator == "lab_rolling" else "dB relative to shot noise")
+        return result.squeezing_db, unit, True
     if choice == "Amplitude":
-        return result.nullifiers, "nullifier amplitude", False
+        return result.nullifiers, ("mode quadrature" if result.analysis_mode == "single"
+                                  else "nullifier amplitude"), False
     unit = (
         "ensemble variance at each mode"
         if result.variance_estimator == "ensemble"
-        else "rolling variance across modes"
+        else ("mean window rolling variance" if result.variance_estimator == "lab_rolling"
+              else "rolling variance across modes")
     )
     return result.variances, unit, False
 
@@ -72,7 +76,8 @@ class NullifierRendererMixin:
             self._draw_message("Calibrate shot noise to display squeezing in dB")
             self.readout.set("Shot-noise calibration required")
             return
-        ensemble_plot = result.variance_estimator == "ensemble" and choice != "Amplitude"
+        ensemble_plot = result.variance_estimator in {"ensemble", "lab_rolling"} \
+            and choice != "Amplitude"
         displayed = {
             name: np.asarray(values if ensemble_plot else values[-2000:])
             for name, values in traces.items()
@@ -154,6 +159,8 @@ class NullifierRendererMixin:
                 minimum = min(int(np.min(v)) for v in counts)
                 maximum = max(int(np.max(v)) for v in counts)
                 time_label += f" · N={minimum}-{maximum} windows"
+        elif result.analysis_mode == "single":
+            time_label += f" · {result.variance_window_modes} modes/window"
         self.canvas.create_text(
             left,
             height - 10,

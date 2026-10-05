@@ -289,9 +289,11 @@ def test_triggered_plot_stays_phase_aligned_across_packet_boundaries() -> None:
             assert visible == count
             captures.append(np.asarray(channel_1).copy())
 
-    assert len(captures) == 4
-    for capture in captures[1:]:
-        np.testing.assert_allclose(capture, captures[0], atol=1e-9)
+    assert len(captures) == 5
+    # The first batch now displays its available portion with missing history blank.
+    np.testing.assert_allclose(captures[0], captures[1][-len(captures[0]):], atol=1e-9)
+    for capture in captures[2:]:
+        np.testing.assert_allclose(capture, captures[1], atol=1e-9)
 
 
 def test_voltage_trigger_stays_armed_when_threshold_is_not_crossed() -> None:
@@ -309,6 +311,88 @@ def test_voltage_trigger_stays_armed_when_threshold_is_not_crossed() -> None:
 
     assert (start, end, crossing) == (0, 10, None)
     assert "waiting" in app.trigger_status.get().lower()
+
+
+@pytest.mark.parametrize("edge,sign", [("Rising", 1), ("Falling", -1)])
+def test_display_trigger_noise_guard_rejects_recrossings_and_accepts_real_edges(edge, sign):
+    app = nr.ReceiverApp.__new__(nr.ReceiverApp)
+    app.frame_lock = threading.Lock()
+    app.sample_history = nr.SampleHistory(capacity=1024)
+    app.time_zoom = 2.0
+    app.time_pan = 0.0
+    app.signal_scripts_enabled = False
+    app.signal_resolution = Value("Medium")
+    app.trigger_enabled = Value(True)
+    app.trigger_channel = Value("CH1")
+    app.trigger_edge = Value(edge)
+    app.trigger_level = Value("0")
+    app.trigger_status = Value("")
+    noise = np.tile(np.array([-20, 20], dtype=np.int16), 256) * sign
+    source = nr.SampleFrame(1, 1, 1000, 512, 0, 0, 0, memoryview(noise), None)
+    app.sample_history.append(source)
+    app._channels_for_signal(source)
+    assert app.precomputed_trigger_index is None
+    clean = np.full(512, -1000 * sign, dtype=np.int16)
+    clean[300:] *= -1
+    source = replace(source, sequence=2, channel_1=memoryview(clean))
+    app.sample_history.append(source)
+    app._channels_for_signal(source)
+    assert app.precomputed_trigger_index is not None
+
+
+@pytest.mark.parametrize("edge,sign", [("Rising", 1), ("Falling", -1)])
+def test_downsampled_trigger_preserves_selected_edge_at_its_real_position(edge, sign):
+    samples = (2000 * np.sin(np.arange(8192) * 2 * np.pi / 17.3)).astype(np.int16)
+    history = nr.SampleHistory(capacity=8192)
+    history.append(nr.SampleFrame(1, 1, 1000, len(samples), 0, 0, 0,
+                                 memoryview(samples), None))
+    capture = history.triggered_plot_channels(8192, 4096, 1, 0, edge, .25, 32, 80)
+    assert capture.trigger_index is not None
+    positions = np.asarray(capture.sample_positions)
+    values = np.asarray(capture.channel_1)
+    left = np.flatnonzero(positions < capture.trigger_index)[-1]
+    right = left + 1
+    assert values[left] * sign < 0 <= values[right] * sign
+    assert positions[right] - positions[left] == pytest.approx(1)
+    assert np.all(np.diff(positions) >= 0)
+    assert len(positions) == len(values) == 32
+
+
+@pytest.mark.parametrize("edge,sign", [("Rising", 1), ("Falling", -1)])
+def test_processed_signal_trigger_uses_the_same_noise_guard(edge, sign):
+    assert nr.find_trigger_crossing(np.array([-.002, .002, -.002, .002]) * sign,
+                                    0, edge, hysteresis=.01) is None
+    assert nr.find_trigger_crossing(np.array([-.05, -.005, .005, .05]) * sign,
+                                    0, edge, hysteresis=.01) == 2
+
+
+@pytest.mark.parametrize("edge,sign", [("Rising", 1), ("Falling", -1)])
+def test_noise_guard_can_arm_and_confirm_outside_the_allowed_edge_positions(edge, sign):
+    samples = (np.arange(24) - 10).astype(np.int16) * sign
+    history = nr.SampleHistory(capacity=24)
+    history.append(nr.SampleFrame(1, 1, 1000, 24, 0, 0, 0, memoryview(samples), None))
+    assert history.find_channel_crossing_before(
+        1, 24, 0, edge, target_index=12, minimum_index=8, hysteresis=5,
+    ) == 10
+    assert nr.find_trigger_crossing(samples, 0, edge, minimum_index=8,
+                                    maximum_index=12, hysteresis=5) == 10
+
+
+@pytest.mark.parametrize("edge", ["Rising", "Falling"])
+def test_one_batch_trigger_acquires_without_old_history_after_loss(edge):
+    samples = (2000 * np.sin(np.arange(4096) * 2 * np.pi / 500 + .37)).astype(np.int16)
+    history = nr.SampleHistory(capacity=8192)
+    for sequence in range(1, 4):
+        history.append(nr.SampleFrame(1, sequence, 1000, 4096, 0, sequence, 0,
+                                      memoryview(samples), None))
+        assert history.size == 4096
+        capture = history.triggered_plot_channels(8192, 4096, 1, 0, edge, .25, 800, 82)
+        assert capture.trigger_index == round(4095 * .25)
+        assert capture.samples_per_channel == 4096
+        assert capture.channel_1 is not None
+        positions = np.asarray(capture.sample_positions)
+        assert positions[0] > 0  # unavailable prehistory remains blank
+        assert positions[-1] <= 4095
 
 
 def test_large_packet_keeps_the_history_within_its_memory_limit() -> None:

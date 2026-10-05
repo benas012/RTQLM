@@ -16,11 +16,15 @@ from apps.native_receiver.nullifier_renderer import finite_runs, select_nullifie
 from quantum_light_engine.post_processing import (
     DEFAULT_CLUSTER_P,
     DEFAULT_CLUSTER_X,
+    LAB_CLUSTER_X,
     ClusterProcessingConfig,
     ClusterProcessingResult,
     NullifierSpec,
     NullifierTerm,
     config_to_dict,
+    lab_processing_config,
+    processing_nullifiers,
+    single_mode_processing_config,
 )
 
 
@@ -84,6 +88,16 @@ def test_basis_change_switches_builtin_formula_and_preserves_custom_formulas() -
     assert match_builtin_basis(custom) is custom
 
 
+def test_single_mode_basis_changes_preserve_independent_channel_calculation() -> None:
+    config = replace(single_mode_processing_config(), measurement_basis="p", single_channel="b")
+    matched = match_builtin_basis(config)
+    assert matched is config
+    rows = processing_nullifiers(matched)
+    assert len(rows) == 1
+    assert rows[0].terms == (NullifierTerm("b", 0, 1.0),)
+    assert "Single-mode CH2" in acquisition_description(matched)
+
+
 def test_receiver_defaults_to_requested_lock_collect_cycle(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -92,8 +106,8 @@ def test_receiver_defaults_to_requested_lock_collect_cycle(
     assert config.window_mode == "periodic"
     assert config.lock_seconds == pytest.approx(0.005)
     assert config.collect_seconds == pytest.approx(0.005)
-    assert config.nullifiers == (DEFAULT_CLUSTER_X,)
-    assert config.variance_estimator == "ensemble"
+    assert config.nullifiers == (LAB_CLUSTER_X,)
+    assert config.variance_estimator == "lab_rolling"
     assert config.history_modes == 25_000
     assert "5 ms lock" in acquisition_description(config)
     assert "5 ms collect" in acquisition_description(config)
@@ -167,13 +181,11 @@ def test_known_legacy_preset_migrates_without_changing_saved_file(
     source = json.dumps(_legacy_data())
     path.write_text(source, encoding="utf-8")
     monkeypatch.setattr(settings, "CLUSTER_CONFIG_PATH", path)
-    assert settings.load_cluster_config() == ClusterProcessingConfig(
-        window_mode="periodic", variance_estimator="ensemble", history_modes=25_000
-    )
+    assert settings.load_cluster_config() == lab_processing_config()
     assert path.read_text(encoding="utf-8") == source
 
 
-def test_empty_receiver_config_uses_full_paper_collection_defaults(
+def test_empty_receiver_config_uses_lab_collection_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "cluster.json"
@@ -181,7 +193,7 @@ def test_empty_receiver_config_uses_full_paper_collection_defaults(
     monkeypatch.setattr(settings, "CLUSTER_CONFIG_PATH", path)
     config = settings.load_cluster_config()
     assert config.window_mode == "periodic"
-    assert config.variance_estimator == "ensemble"
+    assert config.variance_estimator == "lab_rolling"
     assert config.history_modes == 25_000
 
 

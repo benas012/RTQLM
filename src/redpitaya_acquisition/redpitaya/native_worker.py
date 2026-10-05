@@ -15,6 +15,7 @@ from redpitaya_acquisition.acquisition.manager import NonRecoverableAcquisitionE
 from redpitaya_acquisition.config.settings import Settings
 from redpitaya_acquisition.domain.frame import RawSampleFrame
 
+from .binary_adc import BinaryADCClient
 from .callback import create_synchronous_callback
 from .compatibility import StreamingCompatibility
 from .library_loader import (
@@ -22,9 +23,17 @@ from .library_loader import (
     _installed_client_candidates,
     load_streaming_library,
 )
+from .output_control import close_board_output_control, stop_board_outputs
+from .output_signals import (
+    OutputSignalsConfig,
+    dac_memory_size,
+    start_dac_memory,
+    start_output_signals,
+    stop_output_signals,
+)
 
 INITIAL_RESPONSE_TIMEOUT_SECONDS = 20.0
-COMMAND_TIMEOUT_SECONDS = 10.0
+COMMAND_TIMEOUT_SECONDS = 20.0
 PROCESS_EXIT_TIMEOUT_SECONDS = 2.0
 TEST_OUTPUT_DAC_RATE_HZ = 1_953_125
 TEST_OUTPUT_DAC_BUFFER_SIZE_BYTES = 1_638_400
@@ -131,6 +140,9 @@ class NativeStreamingWorker:
             amplitude_volts,
         )
 
+    async def set_output_signals(self, config: OutputSignalsConfig) -> None:
+        await self._command("output-signals", config.model_dump(mode="json", by_alias=True))
+
     async def close(self) -> None:
         process = self._process
         connection = self._connection
@@ -188,9 +200,7 @@ class NativeStreamingWorker:
                 )
                 await asyncio.wait_for(asyncio.shield(future), timeout=COMMAND_TIMEOUT_SECONDS)
             except TimeoutError as exc:
-                raise ConnectionError(
-                    f"native streaming worker timed out during '{name}'"
-                ) from exc
+                raise ConnectionError(f"native streaming worker timed out during '{name}'") from exc
             except (BrokenPipeError, EOFError, OSError) as exc:
                 raise NativeWorkerCrashed(self._exit_detail()) from exc
             finally:
@@ -351,6 +361,7 @@ def _native_worker_entry(
 
     adapter: StreamingCompatibility | None = None
     test_output_client: Any = None
+    output_client: Any = None
     running = False
     stopping = threading.Event()
     wait_thread: threading.Thread | None = None
@@ -362,7 +373,12 @@ def _native_worker_entry(
         config_client_type = getattr(module, "ConfigStreamClient", None)
         if config_client_type is not None:
             config_client = config_client_type()
-            client = module.ADCStreamClient(config_client)
+            if hasattr(config_client, "requestADCServerFPGAStart") and hasattr(
+                module, "ConfigCallback"
+            ):
+                client = BinaryADCClient(module, config_client, settings)
+            else:
+                client = module.ADCStreamClient(config_client)
         else:
             config_client = None
             client = module.ADCStreamClient()
@@ -425,8 +441,28 @@ def _native_worker_entry(
                         if wait_thread is not None:
                             wait_thread.join(5.0)
                         running = False
+                elif command == "output-signals":
+                    config = OutputSignalsConfig.model_validate(arguments[0])
+                    stop_board_outputs(config_client, settings.host)
+                    old_client, output_client = output_client, None
+                    stop_output_signals(old_client)
+                    _stop_test_output(test_output_client)
+                    test_output_client = None
+                    if config.output1.enabled or config.output2.enabled:
+                        assert adapter is not None
+                        output_client = start_output_signals(
+                            module, adapter, config_client, config,
+                            block_size_bytes=settings.block_size_bytes,
+                        )
                 elif command == "test-output":
                     enabled, frequency_hz, amplitude_volts = arguments
+                    if output_client is not None or (
+                        hasattr(module, "DACCallback")
+                        and ((enabled and test_output_client is None) or not enabled)
+                    ):
+                        stop_board_outputs(config_client, settings.host)
+                    old_client, output_client = output_client, None
+                    stop_output_signals(old_client)
                     if enabled:
                         if test_output_client is None:
                             assert adapter is not None
@@ -436,11 +472,16 @@ def _native_worker_entry(
                                 config_client,
                                 float(frequency_hz),
                                 float(amplitude_volts),
+                                settings.block_size_bytes,
                             )
                     else:
                         _stop_test_output(test_output_client)
                         test_output_client = None
                 elif command == "disconnect":
+                    if output_client is not None or test_output_client is not None:
+                        stop_board_outputs(config_client, settings.host)
+                    old_client, output_client = output_client, None
+                    stop_output_signals(old_client)
                     if test_output_client is not None:
                         _stop_test_output(test_output_client)
                         test_output_client = None
@@ -462,6 +503,14 @@ def _native_worker_entry(
             if command == "disconnect":
                 break
     finally:
+        try:
+            if output_client is not None or test_output_client is not None:
+                stop_board_outputs(config_client, settings.host)
+            stop_output_signals(output_client)
+            _stop_test_output(test_output_client)
+        except Exception:
+            pass
+        close_board_output_control(config_client)
         connection.close()
 
 
@@ -471,6 +520,7 @@ def _start_test_output(
     config_client: Any,
     frequency_hz: float,
     amplitude_volts: float,
+    block_size_bytes: int = 65_536,
 ) -> Any:
     if config_client is None:
         raise RuntimeError("OUT1 testing requires a Red Pitaya 3.x streaming connection")
@@ -487,7 +537,7 @@ def _start_test_output(
         for key, value in (
             ("dac_pass_mode", "DAC_NET"),
             ("dac_rate", str(TEST_OUTPUT_DAC_RATE_HZ)),
-            ("dac_size", str(TEST_OUTPUT_DAC_BUFFER_SIZE_BYTES)),
+            ("dac_size", str(dac_memory_size(block_size_bytes))),
         ):
             try:
                 result = config_client.sendConfig(host, key, value)
@@ -498,8 +548,7 @@ def _start_test_output(
         unaligned_samples = TEST_OUTPUT_DAC_RATE_HZ * TEST_OUTPUT_BUFFER_PERIODS / frequency_hz
         buffer_samples = max(
             DAC_16_BIT_SAMPLE_ALIGNMENT,
-            round(unaligned_samples / DAC_16_BIT_SAMPLE_ALIGNMENT)
-            * DAC_16_BIT_SAMPLE_ALIGNMENT,
+            round(unaligned_samples / DAC_16_BIT_SAMPLE_ALIGNMENT) * DAC_16_BIT_SAMPLE_ALIGNMENT,
         )
         phase = np.arange(buffer_samples, dtype=np.float64) * (
             2 * np.pi * TEST_OUTPUT_BUFFER_PERIODS / buffer_samples
@@ -508,10 +557,10 @@ def _start_test_output(
         samples = (np.sin(phase) * peak_counts).astype(np.int16).tolist()
         _require_success("load OUT1 sine buffer", dac_client.setMemory16Bit(1, samples))
         dac_client.setRepeatInf(True)
-        _require_success("start OUT1 DAC stream", dac_client.startStreamingFromMemory(host))
+        start_dac_memory(module, dac_client, host, (1,), config_client)
     except BaseException:
         try:
-            dac_client.notifyStop()
+            stop_output_signals(dac_client)
         except BaseException:
             pass
         raise
@@ -519,17 +568,7 @@ def _start_test_output(
 
 
 def _stop_test_output(client: Any) -> None:
-    if client is None:
-        return
-    try:
-        if hasattr(client, "stopStreaming"):
-            client.stopStreaming()
-    finally:
-        # stopStreaming() stops the board-side DAC stream, while notifyStop()
-        # releases the vendor client's local wait loop. Both are required by
-        # the 3.x wrapper before wait() can return.
-        client.notifyStop()
-    client.wait()
+    stop_output_signals(client)
 
 
 def _require_success(operation: str, result: Any) -> None:

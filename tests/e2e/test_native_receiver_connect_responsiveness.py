@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -8,7 +12,7 @@ import pytest
 from apps.native_receiver import native_receiver as nr
 
 
-def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
+def check_slow_redpitaya_connect_keeps_tk_ui_responsive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -17,8 +21,14 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
         lambda: nr.AppSettings(launch_engine_on_start=False),
     )
     monkeypatch.setattr(nr.ReceiverApp, "refresh_devices", lambda self: None)
+    monkeypatch.setattr(
+        nr.ReceiverApp, "_engine_is_running_for_base", lambda self, _base: False,
+    )
     app = nr.ReceiverApp()
     try:
+        app.attributes("-alpha", 0)
+        # Complete the initial window mapping before measuring a user's Connect action.
+        app.update()
         assert "disabled" in app.connect_button.state()
         device = nr.Device(
             id="11111111-1111-1111-1111-111111111111",
@@ -37,6 +47,7 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
         app._start_socket = lambda _device_id: None  # type: ignore[method-assign]
         app._open_device_tab = lambda _device_id: None  # type: ignore[method-assign]
         app._apply_loaded_devices = lambda _devices: None  # type: ignore[method-assign]
+        ui_thread = threading.get_ident()
 
         def api(
             _api_base: str,
@@ -47,6 +58,7 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
             timeout_seconds: float = 10,
         ) -> dict[str, str] | None:
             del timeout_seconds
+            assert threading.get_ident() != ui_thread
             if path.endswith("/status"):
                 return {"state": "disconnected"}
             if method == "POST" and path.endswith("/connect"):
@@ -60,6 +72,13 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
         app._load_devices = lambda _api_base: [device]  # type: ignore[method-assign]
 
         app.connect_selected()
+        heartbeats: list[float] = []
+
+        def heartbeat() -> None:
+            heartbeats.append(time.monotonic())
+            app.after(25, heartbeat)
+
+        app.after(25, heartbeat)
         seen: list[str] = []
         end = time.monotonic() + 0.7
         while time.monotonic() < end:
@@ -68,6 +87,7 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
             time.sleep(0.02)
 
         assert len(set(seen)) > 2
+        assert len(heartbeats) >= 8
         assert app.loading_active
         assert app.cget("cursor") == ""
         assert app.connection_overlay is not None
@@ -118,4 +138,23 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
 
         assert app.toast_frames == []
     finally:
-        app.destroy()
+        app._on_close()
+
+
+def test_slow_redpitaya_connect_keeps_tk_ui_responsive() -> None:
+    # Tk interpreters and their background callbacks must not leak across pytest tests.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import pytest; from tests.e2e.test_native_receiver_connect_responsiveness "
+            "import check_slow_redpitaya_connect_keeps_tk_ui_responsive; "
+            "patch = pytest.MonkeyPatch(); "
+            "check_slow_redpitaya_connect_keeps_tk_ui_responsive(patch); patch.undo()",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

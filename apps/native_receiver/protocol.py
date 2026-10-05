@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 
 from apps.native_receiver.trigger_capture import interpolate_trigger_window
+from apps.native_receiver.trigger_search import qualified_crossing
 
 HEADER = struct.Struct("<4sBBHQQQQdIIIIQQ")
 HEADER_SIZE = 80
@@ -53,6 +54,7 @@ class TriggeredPlot:
     sample_rate_hz: float
     samples_per_channel: int
     trigger_index: float | None
+    sample_positions: Any = None
 
 
 class SampleHistory:
@@ -87,6 +89,9 @@ class SampleHistory:
             previous is not None
             and (
                 frame.sequence != previous.sequence + 1
+                or frame.stream_id != previous.stream_id
+                or frame.fpga_lost_ch1 != previous.fpga_lost_ch1
+                or frame.fpga_lost_ch2 != previous.fpga_lost_ch2
                 or frame.channel_mask != previous.channel_mask
                 or frame.sample_rate_hz != previous.sample_rate_hz
                 or frame.samples_per_channel != previous.samples_per_channel
@@ -165,8 +170,8 @@ class SampleHistory:
         if self.latest is None:
             return None
         count = min(max(int(requested_samples), 0), self.size)
-        visible = min(max(int(visible_samples), 2), count)
-        if count < visible_samples or visible < 2:
+        visible = max(int(visible_samples), 2)
+        if count < 2:
             return None
 
         pre_trigger_samples = round((visible - 1) * pre_trigger_fraction)
@@ -182,6 +187,14 @@ class SampleHistory:
             hysteresis=hysteresis,
         )
         if crossing is None:
+            # A loss boundary can leave too little history for a full window.
+            # Trigger on real samples anyway; extraction leaves missing data blank.
+            crossing = self.find_channel_crossing_before(
+                trigger_channel, count, level, edge,
+                target_index=target_index if target_index >= 1 else count - 1,
+                hysteresis=hysteresis,
+            )
+        if crossing is None:
             return TriggeredPlot(
                 None,
                 None,
@@ -190,7 +203,7 @@ class SampleHistory:
                 None,
             )
 
-        first, second, trigger_offset = interpolate_trigger_window(
+        first, second, trigger_offset, positions = interpolate_trigger_window(
             self,
             count,
             visible,
@@ -206,6 +219,7 @@ class SampleHistory:
             self.latest.sample_rate_hz,
             visible,
             trigger_offset,
+            positions,
         )
 
     def find_channel_crossing_before(
@@ -239,36 +253,10 @@ class SampleHistory:
 
         hysteresis = max(float(hysteresis), 0.0)
         if hysteresis:
-            rising = edge.lower() != "falling"
-            reached = self._find_last_level_index(
-                buffer,
-                count,
-                lower,
-                upper,
-                level + hysteresis if rising else level - hysteresis,
-                above=rising,
-                chunk_size=chunk_size,
+            return qualified_crossing(
+                lambda start, end: self._channel_window(buffer, count, start, end),
+                count, level, edge, lower, upper, hysteresis, chunk_size,
             )
-            if reached is None:
-                return None
-            armed = self._find_last_level_index(
-                buffer,
-                count,
-                max(lower - 1, 0),
-                reached - 1,
-                level - hysteresis if rising else level + hysteresis,
-                above=not rising,
-                chunk_size=chunk_size,
-            )
-            if armed is None:
-                return None
-            values = self._channel_window(buffer, count, armed, reached + 1)
-            before, after = values[:-1], values[1:]
-            matches = (before < level) & (after >= level) if rising else (
-                (before > level) & (after <= level)
-            )
-            crossings = np.flatnonzero(matches)
-            return armed + int(crossings[0]) + 1 if len(crossings) else reached
 
         chunk_size = max(int(chunk_size), 2)
         while upper >= lower:

@@ -42,6 +42,9 @@ class LayoutMixin:
         )
         signal_menu.add_command(label="Disable signal script", command=self.clear_signal_script)
         signal_menu.add_separator()
+        signal_menu.add_command(
+            label="Red Pitaya output signals…", command=self.open_output_signals
+        )
         signal_menu.add_command(label="1D cluster nullifiers…", command=self.open_cluster_monitor)
         menu.add_cascade(label="Signal", menu=signal_menu)
 

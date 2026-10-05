@@ -441,7 +441,10 @@ def test_out1_test_button_toggles_the_selected_device(
         method: str,
         path: str,
         body: dict[str, bool],
+        *,
+        timeout_seconds: float = 10,
     ) -> dict[str, object]:
+        assert timeout_seconds == 30
         calls.append((method, path, body))
         return {
             "enabled": body["enabled"],

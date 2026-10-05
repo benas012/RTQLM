@@ -135,6 +135,56 @@ def check_trigger_overlay_reuse(app: nr.ReceiverApp) -> None:
     assert not app.canvas.find_withtag("signal_overlay")
 
 
+def check_trigger_directions_and_noise_hold(app: nr.ReceiverApp) -> None:
+    count = 4096
+    app.trigger_enabled.set(True)
+    app.trigger_level.set("0")
+    app.time_zoom = 4
+    for sequence in range(1, 5):
+        t = np.arange((sequence - 1) * count, sequence * count)
+        ch1 = (2000 * np.sin(t * 2 * np.pi / 97.3)).astype(np.int16)
+        ch2 = (2000 * np.cos(t * 2 * np.pi / 97.3)).astype(np.int16)
+        frame = nr.SampleFrame(3, sequence, 1000, count, 0, 0, 0,
+                               memoryview(ch1), memoryview(ch2))
+        app.latest_frame = frame
+        app.sample_history.append(frame)
+    for channel in (1, 2):
+        app.trigger_channel.set(f"CH{channel}")
+        for edge, sign in (("Rising", 1), ("Falling", -1)):
+            app.trigger_edge.set(edge)
+            app.apply_trigger_settings()
+            points = np.asarray(app.canvas.coords(f"signal_ch{channel}")).reshape(-1, 2)
+            trigger_x = app.canvas.coords("trigger_vertical")[0]
+            left = np.flatnonzero(points[:, 0] < trigger_x - 1e-9)[-1]
+            right = left + 1
+            assert (points[left, 1] - points[right, 1]) * sign > 0
+    before = app.canvas.coords("signal_ch2")
+    trace_id = app.canvas.find_withtag("signal_ch2")
+    noise = np.tile(np.array([-20, 20], dtype=np.int16), count // 2)
+    frame = replace(frame, sequence=5, flags=1,
+                    channel_1=memoryview(noise), channel_2=memoryview(noise))
+    app.latest_frame = frame
+    app.sample_history.append(frame)
+    app._handle_frame(frame, 5)
+    assert app.canvas.coords("signal_ch2") == before
+    assert app.canvas.find_withtag("signal_ch2") == trace_id
+    assert app.canvas.itemcget(trace_id, "state") == "normal"
+    app.time_zoom = 1
+    for sequence, edge in enumerate(("Rising", "Falling"), start=6):
+        app.trigger_channel.set("CH1")
+        app.trigger_edge.set(edge)
+        frame = replace(frame, sequence=sequence, fpga_lost_ch1=sequence,
+                        channel_1=memoryview(ch1), channel_2=memoryview(ch2))
+        app.latest_frame = frame
+        app.sample_history.append(frame)
+        app._handle_frame(frame, sequence)
+        assert app.trigger_capture_valid
+        assert app.axis_samples_per_channel == count
+        assert app.sample_history.size == count
+        assert np.isfinite(app.canvas.coords("signal_ch1")).all()
+        assert app.signal_sample_positions[0] > 0
+
+
 def check_ui_callbacks(receiver: nr.ReceiverApp) -> None:
     app = receiver
     frame = noisy_frame(4096 if app.time_zoom < 1 else 65536)
@@ -260,6 +310,8 @@ def run_scenario(scenario: str) -> None:
             check_live_traces(app)
         elif scenario == "trigger":
             check_trigger_overlay_reuse(app)
+        elif scenario == "trigger_edges":
+            check_trigger_directions_and_noise_hold(app)
         elif scenario == "history":
             check_history_zoom(app)
         elif scenario == "pause":
@@ -276,7 +328,8 @@ def run_scenario(scenario: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "scenario", ["traces", "trigger", "callbacks", "history", "history_callbacks", "pause"]
+    "scenario", ["traces", "trigger", "trigger_edges", "callbacks", "history",
+                 "history_callbacks", "pause"]
 )
 def test_native_rendering(scenario: str) -> None:
     # Give each GUI scenario its own Tcl interpreter/process, like the real app.

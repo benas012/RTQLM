@@ -10,15 +10,16 @@ from typing import Any
 from apps.native_receiver.constants import COLORS
 from apps.native_receiver.nullifier_acquisition import (
     AcquisitionWindowControls,
+    AnalysisControls,
     acquisition_description,
     match_builtin_basis,
 )
 from apps.native_receiver.nullifier_renderer import PLOT_CHOICES, NullifierRendererMixin
 from quantum_light_engine.post_processing import (
-    DEFAULT_CLUSTER_P,
-    DEFAULT_CLUSTER_X,
     config_from_dict,
     config_to_dict,
+    lab_processing_config,
+    single_mode_processing_config,
 )
 
 REFRESH_INTERVAL_MS = 200
@@ -36,15 +37,20 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
         self.variance_estimator = tk.StringVar(self)
         self._refresh_after_id: str | None = None
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(2, weight=1)
+        self.rowconfigure(3, weight=1)
 
-        toolbar = ttk.Frame(self, style="Toolbar.TFrame", padding=(8, 5))
+        toolbar = ttk.Frame(self, style="Toolbar.TFrame", padding=(8, 0))
         toolbar.grid(row=0, column=0, sticky="ew")
         self.acquisition = AcquisitionWindowControls(toolbar, compact=True)
         self.acquisition.pack(side="left", fill="x", expand=True)
 
-        actions = ttk.Frame(self, style="Toolbar.TFrame", padding=(8, 2))
-        actions.grid(row=1, column=0, sticky="ew")
+        analysis_bar = ttk.Frame(self, style="Toolbar.TFrame", padding=(8, 0))
+        analysis_bar.grid(row=1, column=0, sticky="ew")
+        self.analysis = AnalysisControls(analysis_bar, compact=True)
+        self.analysis.pack(fill="x", expand=True)
+
+        actions = ttk.Frame(self, style="Toolbar.TFrame", padding=(8, 0))
+        actions.grid(row=2, column=0, sticky="ew")
         ttk.Button(
             actions,
             text="Configure…",
@@ -52,21 +58,24 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
             style="Compact.TButton",
         ).grid(row=0, column=0, sticky="w", padx=(0, 6))
         ttk.Button(
-            actions, text="Use 1D preset", command=self._preset, style="Compact.TButton"
+            actions, text="Use lab 1D preset", command=self._preset, style="Compact.TButton"
         ).grid(row=0, column=1, sticky="w", padx=(0, 12))
         ttk.Button(
-            actions, text="Apply timing / basis", command=self._apply, style="Compact.TButton"
+            actions, text="Single-mode preset", command=self._single_preset, style="Compact.TButton"
         ).grid(row=0, column=2, sticky="w", padx=(0, 12))
-        ttk.Label(actions, text="Plot", style="Toolbar.TLabel").grid(row=0, column=3, sticky="w")
+        ttk.Button(
+            actions, text="Apply settings", command=self._apply, style="Compact.TButton"
+        ).grid(row=0, column=3, sticky="w", padx=(0, 12))
+        ttk.Label(actions, text="Plot", style="Toolbar.TLabel").grid(row=0, column=4, sticky="w")
         ttk.Combobox(
             actions,
             textvariable=self.plot_choice,
             values=PLOT_CHOICES,
             state="readonly",
             width=14,
-        ).grid(row=0, column=4, sticky="w", padx=5)
+        ).grid(row=0, column=5, sticky="w", padx=5)
         calibration = ttk.Frame(actions, style="Toolbar.TFrame")
-        calibration.grid(row=1, column=0, columnspan=5, sticky="w", pady=(3, 0))
+        calibration.grid(row=1, column=0, columnspan=6, sticky="w")
         for title, command in (
             ("Start shot noise", self._start_calibration),
             ("Finish", self._finish_calibration),
@@ -81,7 +90,7 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
         ttk.Combobox(
             calibration,
             textvariable=self.variance_estimator,
-            values=("Repeated windows", "Rolling modes"),
+            values=("Lab rolling / average", "Repeated windows", "Rolling modes"),
             state="readonly",
             width=17,
         ).pack(side="left")
@@ -92,9 +101,9 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
             highlightthickness=1,
             highlightbackground=self.palette["border_subtle"],
         )
-        self.canvas.grid(row=2, column=0, sticky="nsew")
-        footer = ttk.Frame(self, style="Surface.TFrame", padding=(8, 3))
-        footer.grid(row=3, column=0, sticky="ew")
+        self.canvas.grid(row=3, column=0, sticky="nsew")
+        footer = ttk.Frame(self, style="Surface.TFrame", padding=(8, 0))
+        footer.grid(row=4, column=0, sticky="ew")
         ttk.Label(footer, textvariable=self.status, style="Muted.TLabel").pack(anchor="w")
         ttk.Label(footer, textvariable=self.readout, style="Muted.TLabel").pack(anchor="w")
         ttk.Label(footer, textvariable=self.schedule, style="Muted.TLabel").pack(anchor="w")
@@ -105,17 +114,21 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
 
     def load_config(self, config: Any) -> None:
         self.acquisition.load(config)
+        self.analysis.load(config)
         self.schedule.set(acquisition_description(config))
         self.variance_estimator.set(
-            "Repeated windows" if config.variance_estimator == "ensemble" else "Rolling modes"
+            {"ensemble": "Repeated windows", "rolling": "Rolling modes",
+             "lab_rolling": "Lab rolling / average"}[config.variance_estimator]
         )
 
     def _selected_config(self) -> Any:
         data = config_to_dict(self.parent.cluster_processor.config)
         self.acquisition.apply_to(data)
-        data["varianceEstimator"] = (
-            "ensemble" if self.variance_estimator.get() == "Repeated windows" else "rolling"
-        )
+        data["varianceEstimator"] = {
+            "Repeated windows": "ensemble", "Rolling modes": "rolling",
+            "Lab rolling / average": "lab_rolling",
+        }[self.variance_estimator.get()]
+        self.analysis.apply_to(data)
         return match_builtin_basis(config_from_dict(data))
 
     def _apply(self) -> None:
@@ -127,15 +140,52 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
     def _preset(self) -> None:
         try:
             config = self._selected_config()
-            spec = DEFAULT_CLUSTER_X if config.measurement_basis == "x" else DEFAULT_CLUSTER_P
-            self.parent.apply_cluster_config(replace(config, nullifiers=(spec,)))
+            lab = lab_processing_config(config.measurement_basis)
+            self.parent.apply_cluster_config(replace(
+                lab, window_mode=config.window_mode, lock_seconds=config.lock_seconds,
+                collect_seconds=config.collect_seconds,
+                trigger_channel=config.trigger_channel, trigger_edge=config.trigger_edge,
+                trigger_level_volts=config.trigger_level_volts,
+                trigger_delay_seconds=config.trigger_delay_seconds,
+                trigger_holdoff_seconds=config.trigger_holdoff_seconds,
+                trigger_hysteresis_volts=config.trigger_hysteresis_volts,
+            ))
         except Exception as exc:
             messagebox.showerror("Invalid nullifier configuration", str(exc), parent=self)
 
+    def _single_preset(self) -> None:
+        try:
+            current = self._selected_config()
+            single = single_mode_processing_config(
+                mode_samples=current.mode_samples,
+                variance_window_modes=current.variance_window_modes or 100,
+            )
+            self.parent.apply_cluster_config(replace(
+                single,
+                measurement_basis=current.measurement_basis,
+                single_channel=current.single_channel,
+                window_mode=current.window_mode,
+                lock_seconds=current.lock_seconds,
+                collect_seconds=current.collect_seconds,
+                collection_guard_seconds=current.collection_guard_seconds,
+                collection_end_guard_samples=current.collection_end_guard_samples,
+                trigger_channel=current.trigger_channel,
+                trigger_edge=current.trigger_edge,
+                trigger_level_volts=current.trigger_level_volts,
+                trigger_delay_seconds=current.trigger_delay_seconds,
+                trigger_holdoff_seconds=current.trigger_holdoff_seconds,
+                trigger_hysteresis_volts=current.trigger_hysteresis_volts,
+            ))
+        except Exception as exc:
+            messagebox.showerror("Invalid squeezing configuration", str(exc), parent=self)
+
     def _start_calibration(self) -> None:
         try:
+            config = self._selected_config()
+            if config != self.parent.cluster_processor.config:
+                self.parent.apply_cluster_config(config)
             self.parent.start_cluster_calibration()
-            self.status.set("Acquiring shot noise; use the shot-noise measurement")
+            self.status.set("Acquiring shot noise; keep the shot-noise measurement active")
         except Exception as exc:
             messagebox.showerror("Calibration error", str(exc), parent=self)
 

@@ -7,7 +7,9 @@ This repository contains two applications for multi-device Red Pitaya acquisitio
 - [Native Receiver](apps/native_receiver/README.md) — the Tk desktop client for connecting to the
   engine, viewing live signals, spectra and configurable 1D nullifiers, and running post-processing
   tools. The analysis area has Spectrum analyzer and Nullifiers tabs, with configurable collection
-  windows for sample-hold experiments. See the [nullifier guide](docs/nullifiers.md).
+  windows for sample-hold experiments. Its default lab method uses 308 ns Gaussian-linear-cosine
+  modes, editable X/P nullifiers and rolling variances averaged across windows in dB.
+  See the [nullifier guide](docs/nullifiers.md).
 
 The shared `src/redpitaya_acquisition` package is the hardware-facing acquisition core used by the
 engine. It contains the simulator, Red Pitaya integration, frame model, binary encoder, loss metrics,
@@ -36,3 +38,12 @@ uv run pytest -q
 uv run ruff check .
 uv run mypy
 ```
+
+## Custom Red Pitaya output signals
+
+The receiver now controls both OUT1 and OUT2 of each connected Red Pitaya. Open **Outputs…** or
+**Signal > Red Pitaya output signals…** to set waveform, frequency, peak amplitude, offset and phase,
+import arbitrary waveform samples, or load the X/P nullifier cancellation test presets.
+See [output controls and loopback testing](docs/output-signals.md) for the 3.00-57 backend,
+frequency quantization, stopping behavior and API.
+

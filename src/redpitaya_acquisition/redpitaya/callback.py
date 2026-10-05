@@ -59,6 +59,8 @@ def create_synchronous_callback(
         def __init__(self) -> None:
             super().__init__()
             self._previous_pack_id: int | None = None
+            self._fpga_lost_ch1 = 0
+            self._fpga_lost_ch2 = 0
 
         def _receive(self, pack: Any) -> None:
             try:
@@ -96,10 +98,18 @@ def create_synchronous_callback(
             packet_gap = (
                 self._previous_pack_id is not None and pack_id != self._previous_pack_id + 1
             )
-            self._previous_pack_id = pack_id
             sample_rate = _sample_rate(meta, settings)
             sample_count = int(channel_1.size if channel_1 is not None else channel_2.size)  # type: ignore[union-attr]
-            return RawSampleFrame(
+            # Vendor streaming_fpga.cpp::passCh resets its overflow sums after
+            # each delivered buffer; fpgaLost therefore describes this packet.
+            # Our frame protocol exposes cumulative per-stream loss counters.
+            lost_1 = int(_field(meta_1, "fpgaLost", 0)) if channel_1 is not None else 0
+            lost_2 = int(_field(meta_2, "fpgaLost", 0)) if channel_2 is not None else 0
+            if lost_1 < 0 or lost_2 < 0:
+                raise ValueError("FPGA lost sample counts must be non-negative")
+            total_lost_1 = self._fpga_lost_ch1 + lost_1
+            total_lost_2 = self._fpga_lost_ch2 + lost_2
+            frame = RawSampleFrame(
                 stream_id=stream_id,
                 sequence=0,
                 source_pack_id=pack_id,
@@ -111,10 +121,15 @@ def create_synchronous_callback(
                 channel_mask=settings.channel_mask,
                 channel_1=channel_1,
                 channel_2=channel_2,
-                fpga_lost_ch1=int(_field(meta_1, "fpgaLost", 0)),
-                fpga_lost_ch2=int(_field(meta_2, "fpgaLost", 0)),
+                fpga_lost_ch1=total_lost_1,
+                fpga_lost_ch2=total_lost_2,
                 packet_gap_detected=packet_gap or channel_pack_mismatch,
             )
+            # Commit continuity metadata only after the whole packet validates.
+            self._previous_pack_id = pack_id
+            self._fpga_lost_ch1 = total_lost_1
+            self._fpga_lost_ch2 = total_lost_2
+            return frame
 
         def connected(self, *_args: Any) -> None:
             on_event("connected", None)
@@ -150,9 +165,12 @@ def create_synchronous_callback(
 
 def _copy_channel(pack: Any, name: str) -> np.ndarray[Any, np.dtype[np.int16]]:
     channel = getattr(pack, name, None)
-    if channel is None or not hasattr(channel, "raw"):
+    # The vendor raw getter allocates a Python list for the entire buffer.
+    # hasattr would perform that conversion once, then the read would repeat it.
+    raw = getattr(channel, "raw", None)
+    if raw is None:
         raise ValueError(f"enabled {name} is missing raw samples")
-    array = np.array(channel.raw, dtype="<i2", copy=True, order="C")
+    array = np.array(raw, dtype="<i2", copy=True, order="C")
     if array.ndim != 1 or array.size == 0:
         raise ValueError(f"enabled {name} must contain a non-empty 1-D array")
     array.flags.writeable = False

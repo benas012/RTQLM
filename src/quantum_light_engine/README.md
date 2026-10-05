@@ -4,6 +4,12 @@ The Quantum Light Engine is the repository's headless service. It owns persisten
 one isolated acquisition session per device, device lifecycle state, and binary sample publication.
 The native receiver is a separate client; the engine does not contain browser UI or signal rendering.
 
+The engine also owns per-board DAC output control. Connected physical devices expose
+`GET/PUT /api/v1/devices/{deviceId}/outputs` and `POST /api/v1/devices/{deviceId}/outputs/stop`.
+Both outputs have configurable waveform, frequency, peak amplitude, offset and phase; arbitrary
+normalized samples are supported. See [output signals](../../docs/output-signals.md) for the
+stock 3.00-57 DAC backend, stop control, frequency quantization and receiver loopback presets.
+
 ## Install and configure
 
 From the repository root, install the runtime and development tools:

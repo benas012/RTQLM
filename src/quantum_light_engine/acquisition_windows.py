@@ -37,14 +37,22 @@ class AcquisitionWindowGate:
         trigger_delay_seconds: float,
         trigger_holdoff_seconds: float,
         trigger_hysteresis_volts: float,
+        guard_seconds: float = 0.0,
+        end_guard_samples: int = 0,
     ) -> None:
         self.mode = mode
         self.lock_samples = round(lock_seconds * sample_rate_hz)
         self.collect_samples = round(collect_seconds * sample_rate_hz)
         self.delay_samples = round(trigger_delay_seconds * sample_rate_hz)
-        self.holdoff_samples = round(trigger_holdoff_seconds * sample_rate_hz)
+        self.guard_samples = round(guard_seconds * sample_rate_hz)
+        self.end_guard_samples = end_guard_samples
         if mode != "continuous" and self.collect_samples < 1:
             raise ValueError("collection duration is shorter than one ADC sample")
+        if mode != "continuous" and (
+            self.guard_samples + end_guard_samples >= self.collect_samples
+        ):
+            raise ValueError("collection guards leave no samples to collect")
+        self.holdoff_samples = round(trigger_holdoff_seconds * sample_rate_hz)
         if mode == "periodic" and lock_seconds > 0 and self.lock_samples < 1:
             raise ValueError("locking duration is shorter than one ADC sample")
         self.trigger_channel = trigger_channel
@@ -95,8 +103,11 @@ class AcquisitionWindowGate:
         spans: list[AcquisitionSpan] = []
         while cursor < stop:
             cycle = cursor // period
-            collect_start = cycle * period + self.lock_samples
-            collect_stop = (cycle + 1) * period
+            collect_start = cycle * period + self.lock_samples + self.guard_samples
+            collect_stop = (cycle + 1) * period - self.end_guard_samples
+            if cursor >= collect_stop:
+                cursor = (cycle + 1) * period
+                continue
             cursor = max(cursor, collect_start)
             if cursor >= stop:
                 break
@@ -106,7 +117,7 @@ class AcquisitionWindowGate:
             if cycle != self._last_periodic_window:
                 self.collection_windows += 1
                 self._last_periodic_window = cycle
-            cursor = end
+            cursor = (cycle + 1) * period if end == collect_stop else end
         self.state = "locking" if stop % period < self.lock_samples else "collecting"
         return spans
 
@@ -158,8 +169,9 @@ class AcquisitionWindowGate:
         edge_index = int(np.searchsorted(edges, self._next_allowed_edge))
         while edge_index < edges.size:
             edge = int(edges[edge_index])
-            start = edge + self.delay_samples
-            stop = start + self.collect_samples
+            nominal_start = edge + self.delay_samples
+            start = nominal_start + self.guard_samples
+            stop = nominal_start + self.collect_samples - self.end_guard_samples
             window_id = self.collection_windows
             self.collection_windows += 1
             self._windows.append((start, stop, window_id))

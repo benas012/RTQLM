@@ -10,6 +10,7 @@ from quantum_light_engine.post_processing import (
     NullifierSpec,
     NullifierTerm,
     config_from_dict,
+    lab_processing_config,
 )
 
 _LEGACY_NULLIFIERS = (
@@ -36,9 +37,7 @@ _LEGACY_NULLIFIERS = (
 
 
 def default_receiver_cluster_config() -> ClusterProcessingConfig:
-    return ClusterProcessingConfig(
-        window_mode="periodic", variance_estimator="ensemble", history_modes=25_000
-    )
+    return lab_processing_config()
 
 
 def receiver_cluster_config(data: dict[str, object]) -> ClusterProcessingConfig:
@@ -51,6 +50,11 @@ def receiver_cluster_config(data: dict[str, object]) -> ClusterProcessingConfig:
     if legacy and data:
         normalized.setdefault("modeShape", "gaussian_linear_cosine")
     config = config_from_dict(normalized)
+    old_paper_default = ClusterProcessingConfig(
+        window_mode="periodic", variance_estimator="ensemble", history_modes=25_000
+    )
+    if config == old_paper_default:
+        return default_receiver_cluster_config()
     expected_legacy = ClusterProcessingConfig(
         mode_width_seconds=0.308e-6,
         measurement_frequency_hz=6e6,

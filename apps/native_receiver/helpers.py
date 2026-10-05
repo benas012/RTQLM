@@ -19,6 +19,7 @@ from apps.native_receiver.constants import (
     WIDE_VIEW_FAST_REFRESH_SECONDS,
 )
 from apps.native_receiver.protocol import Device
+from apps.native_receiver.trigger_search import qualified_crossing
 
 
 def editable_profile_payload(profile: dict[str, Any]) -> dict[str, Any]:
@@ -98,6 +99,7 @@ def find_trigger_crossing(
     target_index: int | None = None,
     minimum_index: int | None = None,
     maximum_index: int | None = None,
+    hysteresis: float = 0.0,
 ) -> int | None:
     """Find the requested threshold edge nearest the preferred display position."""
     if samples is None or len(samples) < 2 or not np.isfinite(level):
@@ -111,6 +113,12 @@ def find_trigger_crossing(
     else:
         matches = finite & (before < level) & (after >= level)
     crossings = np.flatnonzero(matches) + 1
+    if hysteresis > 0:
+        lower = max(minimum_index or 1, 1)
+        upper = min(maximum_index if maximum_index is not None else len(data) - 1,
+                    len(data) - 1)
+        return qualified_crossing(lambda start, end: data[start:end], len(data),
+                                  level, edge, lower, upper, hysteresis)
     if minimum_index is not None:
         crossings = crossings[crossings >= minimum_index]
     if maximum_index is not None:
@@ -217,9 +225,10 @@ def acquisition_channel_count(device: Device | None) -> int:
 def acquisition_batch_seconds(
     block_size_bytes: int, channel_count: int, sample_rate_hz: float
 ) -> float:
+    """The vendor block size is per channel; simultaneous channels share its duration."""
     if block_size_bytes <= 0 or channel_count <= 0 or sample_rate_hz <= 0:
         return 0.0
-    samples_per_channel = block_size_bytes / 2 / channel_count
+    samples_per_channel = block_size_bytes / 2
     return samples_per_channel / sample_rate_hz
 
 
@@ -290,6 +299,8 @@ def draw_channel(
     point_budget: int = MAX_POINTS,
     *,
     tag: str = "",
+    sample_positions: Any = None,
+    sample_span: int | None = None,
 ) -> int | None:
     if samples is None or len(samples) < 2:
         if tag:
@@ -298,7 +309,12 @@ def draw_channel(
     indices = np.linspace(0, len(samples) - 1, min(len(samples), point_budget), dtype=np.intp)
     data = samples_to_numpy(samples)[indices]
     points = np.empty((len(data), 2), dtype=np.float64)
-    points[:, 0] = x_offset + indices * (width / (len(samples) - 1))
+    if sample_positions is None:
+        points[:, 0] = x_offset + indices * (width / (len(samples) - 1))
+    else:
+        positions = np.asarray(sample_positions)
+        span = sample_span - 1 if sample_span is not None else positions[-1]
+        points[:, 0] = x_offset + positions[indices] * (width / max(span, 1))
     points[:, 1] = y_offset - data * y_scale
     return update_trace_line(canvas, points.ravel().tolist(), color, tag, "signal_trace")
 

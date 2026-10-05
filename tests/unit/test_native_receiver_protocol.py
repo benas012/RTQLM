@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import struct
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -101,3 +102,19 @@ def test_history_starts_fresh_after_a_reported_packet_gap() -> None:
     assert snapshot is not None
     assert snapshot.samples_per_channel == 4
     np.testing.assert_array_equal(snapshot.channel_1, after_gap)
+
+
+@pytest.mark.parametrize("change", [
+    {"stream_id": 2}, {"fpga_lost_ch1": 10}, {"fpga_lost_ch2": 10},
+])
+@pytest.mark.parametrize("edge,sign", [("Rising", 1), ("Falling", -1)])
+def test_trigger_does_not_join_an_edge_across_lost_samples_or_streams(change, edge, sign):
+    history = SampleHistory(capacity=32)
+    low = np.full(8, -1000 * sign, dtype=np.int16)
+    high = -low
+    first = SampleFrame(3, 1, 1000, 8, 0, 0, 0, memoryview(low), memoryview(low), 1)
+    history.append(first)
+    history.append(replace(first, sequence=2, channel_1=memoryview(high),
+                           channel_2=memoryview(high), **change))
+    assert history.size == 8
+    assert history.find_channel_crossing_before(1, 32, 0, edge, target_index=31) is None

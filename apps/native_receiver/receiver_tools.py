@@ -127,7 +127,6 @@ class ReceiverToolsMixin:
             self.cluster_processor.start_calibration()
             self.latest_cluster_result = None
             self.cluster_error = None
-            self.cluster_last_sequence = None
 
     def finish_cluster_calibration(self) -> dict[str, float]:
         with self.cluster_lock:
