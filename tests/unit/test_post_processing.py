@@ -8,7 +8,6 @@ from quantum_light_engine.post_processing import (
     NullifierSpec,
     NullifierTerm,
     RealtimeClusterProcessor,
-    apply_long_mode_to_trace,
     build_gauss_lin_cos_mode,
     build_gauss_lin_mode_template,
     build_mode_template,
@@ -16,27 +15,50 @@ from quantum_light_engine.post_processing import (
     compute_nullifier,
     config_from_dict,
     config_to_dict,
+    mode_sample_count,
     normalize_mode,
     nullifier_shot_noise_variance,
     rolling_variance,
-    shot_noise_cluster_coefficient,
-    tile_mode,
     validate_mode_sampling,
 )
 
 
-def test_apply_long_mode_extracts_one_quadrature_per_mode() -> None:
+@pytest.mark.parametrize(('rate', 'expected'), [(125_000_000, 40), (15_625_000, 5)])
+def test_time_width_sets_flat_mode_duration_and_samples(rate: float, expected: int) -> None:
+    config = ClusterProcessingConfig(mode_shape='identity', mode_samples=None,
+                                    mode_width_seconds=320e-9, min_samples_per_mode=2,
+                                    channel_b_delay_samples=0, history_modes=1000)
+    values = np.ones(400)
+    result = RealtimeClusterProcessor(config).feed(values, values, rate)
+    assert result is not None
+    assert result.mode_samples == expected
+    assert result.mode_period_seconds == pytest.approx(expected / rate)
+    np.testing.assert_allclose(result.quadratures['a'], np.sqrt(expected / rate))
+
+
+def test_time_width_cannot_produce_a_mode_below_the_sampling_limit() -> None:
+    config = ClusterProcessingConfig(mode_shape='identity', mode_width_seconds=308e-9,
+                                    min_samples_per_mode=2)
+    with pytest.raises(ValueError, match='only 0 samples'):
+        RealtimeClusterProcessor(config).feed(np.ones(100), np.ones(100), 125_000_000 / 1024)
+
+
+def test_lab_sample_count_is_stable_at_an_integer_grid_boundary() -> None:
+    rate = 125_000_000 / 1024
+    assert mode_sample_count(458.752 * 1e-6, rate, 'lab_gaussian_linear_cosine') == 56
+    assert mode_sample_count(308e-9, 125_000_000, 'lab_gaussian_linear_cosine') == 38
+
+
+def test_processor_extracts_one_normalized_quadrature_per_mode() -> None:
     signal = np.array([1.0, 2.0, 3.0, 4.0])
-    short_mode = np.array([0.5, 1.0])
-    long_mode = tile_mode(short_mode, signal.size)
-
-    modulated, quadratures, points_per_mode = apply_long_mode_to_trace(
-        signal, long_mode, short_mode, dt_seconds=0.25
-    )
-
-    assert points_per_mode == 2
-    np.testing.assert_allclose(modulated, [0.5, 2.0, 1.5, 4.0])
-    np.testing.assert_allclose(quadratures, [0.625, 1.375])
+    processor = RealtimeClusterProcessor(ClusterProcessingConfig(
+        explicit_mode_template=(0.5, 1.0), min_samples_per_mode=2,
+    ))
+    result = processor.feed(signal, signal, 4)
+    assert result is not None and result.mode_samples == 2
+    expected = np.array([0.625, 1.375]) / np.sqrt(0.25 * (0.5**2 + 1))
+    np.testing.assert_allclose(result.quadratures["a"], expected)
+    np.testing.assert_allclose(result.quadratures["b"], expected)
 
 
 def test_default_cluster_nullifiers_match_lab_formula() -> None:
@@ -86,9 +108,17 @@ def test_mode_template_is_normalized_to_continuous_time() -> None:
 
 
 def test_shot_noise_coefficient_and_cluster_squeezing() -> None:
-    coefficient = shot_noise_cluster_coefficient([np.array([-1.0, 1.0]), np.array([-2.0, 2.0])])
-
-    assert coefficient == pytest.approx(1 / np.sqrt(5))
+    processor = RealtimeClusterProcessor(ClusterProcessingConfig(
+        explicit_mode_template=(1., 0.), min_samples_per_mode=2,
+        calibration_estimator="segment_mean", window_mode="periodic",
+        lock_seconds=0, collect_seconds=1,
+    ))
+    processor.start_calibration()
+    signal = np.array([-2., 0., 2., 0., -4., 0., 4., 0.])
+    processor.feed(signal, signal, 4)
+    coefficients = processor.finish_calibration(minimum_modes=4)
+    assert coefficients["a"] == pytest.approx(1 / np.sqrt(5))
+    assert coefficients["b"] == pytest.approx(1 / np.sqrt(5))
     np.testing.assert_allclose(cluster_squeezing_db(np.array([2.0])), [0.0])
 
 

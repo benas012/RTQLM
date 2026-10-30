@@ -53,6 +53,13 @@ def test_lab_signs_basis_and_p_start_match_supplied_script() -> None:
     assert receiver_cluster_config({}).mode_shape == "lab_gaussian_linear_cosine"
 
 
+@pytest.mark.parametrize("basis, expected", [("x", LAB_CLUSTER_X), ("p", LAB_CLUSTER_P)])
+def test_lab_basis_switch_preserves_signs_with_a_flat_temporal_template(basis, expected) -> None:
+    config = replace(lab_processing_config("p" if basis == "x" else "x"),
+                     mode_shape="identity", mode_samples=16, measurement_basis=basis)
+    assert match_builtin_basis(config).nullifiers == (expected,)
+
+
 @pytest.mark.parametrize("width", [10, 11, 17])
 def test_lab_rolling_boundaries_match_numpy_population_variance(width: int) -> None:
     signal = np.array([1., 2., -3., 8., -5., 3., 12., 2., -2., 0., 4., 9.])

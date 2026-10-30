@@ -103,58 +103,28 @@ class DeviceTabsMixin:
         self.tab_hitboxes.clear()
         height = max(self.tab_bar.winfo_height(), 34)
         bottom = height - 1
-        top = 0
         x = 0.0
-        slant = 14.0
         open_devices = [self._device_by_id(device_id) for device_id in self.open_device_ids]
         open_devices = [device for device in open_devices if device is not None]
 
         if not open_devices:
-            width = 232
-            self.tab_bar.create_polygon(
-                0,
-                bottom,
-                0,
-                top,
-                width - slant,
-                top,
-                width,
-                bottom,
-                fill=COLORS["panel_2"],
-                outline=COLORS["grid"],
-            )
-            self.tab_bar.create_text(
-                14,
-                height / 2,
-                text="No Red Pitaya tab open",
-                fill=COLORS["muted"],
-                anchor="w",
-                font=("Segoe UI", 9, "bold"),
-            )
+            self.tab_bar.grid_remove()
             return
 
+        self.tab_bar.grid()
         self.open_device_ids = [device.id for device in open_devices]
-        for index, device in enumerate(open_devices):
+        for device in open_devices:
             selected = self.selected_device is not None and device.id == self.selected_device.id
-            width = min(max(132, 62 + len(device.name) * 7), 210)
-            fill = COLORS["panel"] if selected else COLORS["panel_2"]
-            outline = COLORS["accent"] if selected else COLORS["grid"]
-            if index == 0:
-                points = (x, bottom, x, top, x + width - slant, top, x + width, bottom)
-            else:
-                points = (
-                    x,
-                    bottom,
-                    x + slant,
-                    top,
-                    x + width - slant,
-                    top,
-                    x + width,
-                    bottom,
-                )
-            self.tab_bar.create_polygon(*points, fill=fill, outline=outline)
+            width = min(max(160, 62 + len(device.name) * 7), 240)
+            self.tab_bar.create_rectangle(
+                x, 0, x + width, bottom,
+                fill=COLORS["surface_elevated"] if selected else COLORS["surface"], outline="",
+            )
+            if selected:
+                self.tab_bar.create_line(x + 12, bottom, x + width - 12, bottom,
+                                         fill=COLORS["accent"], width=2)
             self.tab_bar.create_text(
-                x + (12 if index == 0 else 22),
+                x + 12,
                 height / 2,
                 text=self._tab_label(device),
                 fill=COLORS["text"] if selected else COLORS["muted"],
@@ -162,7 +132,7 @@ class DeviceTabsMixin:
                 font=("Segoe UI", 9, "bold"),
             )
             self.tab_hitboxes.append((x, x + width, device.id))
-            x += width - 8
+            x += width + 6
 
     def _tab_label(self, device: Device) -> str:
         channels = "CH1" if device.channel_1_enabled else ""

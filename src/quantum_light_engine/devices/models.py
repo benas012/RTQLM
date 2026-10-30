@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -30,6 +31,8 @@ class ProfileFields(CamelModel):
     channel_1_enabled: bool = True
     channel_2_enabled: bool = True
     decimation: int = Field(default=256, ge=1, le=65_536)
+    acquisition_mode: Literal["streaming", "buffered"] = "streaming"
+    capture_samples: int = Field(default=625_024, ge=64, le=4_194_304, multiple_of=16)
     block_size_bytes: int = Field(default=131_072, ge=2_048, le=2_097_152)
     adc_buffer_size_bytes: int = Field(default=4_194_304, ge=1_048_576, le=104_857_600)
     streaming_module_path: str | None = None

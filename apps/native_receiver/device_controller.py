@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 from typing import Any
 
+from apps.native_receiver.api_client import ApiError, EngineClient
 from apps.native_receiver.constants import (
+    COLORS,
     CONNECTION_FAILED_NOTICE,
     CONNECTION_FAILED_SPECTRUM_NOTICE,
     CONNECTION_OVERLAY_BUSY_LABELS,
@@ -17,7 +19,6 @@ from apps.native_receiver.constants import (
 )
 from apps.native_receiver.dialogs import (
     AddRedPitayaDialog,
-    ApiError,
 )
 from apps.native_receiver.helpers import (
     editable_profile_payload,
@@ -33,15 +34,33 @@ class DeviceControllerMixin:
         enabled = device is not None and not self.__dict__.get("loading_active", False)
         socket_alive = self.socket_thread is not None and self.socket_thread.is_alive()
         runtime_state = str(device.state or "").lower() if device is not None else ""
+        can_restart = runtime_state in DISCONNECTED_STATES | {"faulted", "ready"}
         connected = device is not None and (
             runtime_state not in DISCONNECTED_STATES or socket_alive
         )
+        if "acquisition_state" in self.__dict__:
+            label = self._device_state_label(runtime_state)[0].lstrip("●○◐! ")
+            if runtime_state == "ready" and self.__dict__.get("stream_stopped", False):
+                label = "Stopped"
+            if (device is not None
+                    and getattr(device, "acquisition_mode", "streaming") == "buffered"
+                    and runtime_state == "streaming"):
+                label = "Buffered · gaps"
+            set_if_changed(self.acquisition_state, label if device is not None else "Disconnected")
         if "connect_button" in self.__dict__:
             button_text = (
+                "Retry connection" if runtime_state == "faulted" else
+                "Start streaming" if runtime_state == "ready" else
+                "Reconnect" if socket_alive and can_restart else
                 "Attach stream" if runtime_state == "streaming" and not socket_alive else "Connect"
             )
             self.connect_button.configure(
-                text=button_text, state=tk.NORMAL if enabled and not socket_alive else tk.DISABLED
+                text=button_text,
+                state=tk.NORMAL if enabled and (not socket_alive or can_restart) else tk.DISABLED,
+            )
+        if "stop_stream_button" in self.__dict__:
+            self.stop_stream_button.configure(
+                state=tk.NORMAL if enabled and runtime_state in STREAMING_STATES else tk.DISABLED,
             )
         if "disconnect_button" in self.__dict__:
             if connected:
@@ -178,7 +197,9 @@ class DeviceControllerMixin:
         if self.selected_device is None:
             messagebox.showerror("No device", "Select a Red Pitaya first.")
             return
-        if self.socket_thread and self.socket_thread.is_alive():
+        socket_alive = self.socket_thread is not None and self.socket_thread.is_alive()
+        cached_state = str(self.selected_device.state or "").lower()
+        if socket_alive and cached_state not in DISCONNECTED_STATES | {"faulted", "ready"}:
             return
 
         device_id = self.selected_device.id
@@ -189,11 +210,12 @@ class DeviceControllerMixin:
             cached_state=self.selected_device.state,
         )
         self.connection_failure_active = False
+        self.stream_stopped = False
         self.status.set("attaching sample socket")
         self._open_device_tab(device_id)
-        self._start_socket(device_id)
+        if not socket_alive:
+            self._start_socket(device_id)
 
-        cached_state = str(self.selected_device.state or "").lower()
         if cached_state in STREAMING_STATES:
             return
 
@@ -251,11 +273,50 @@ class DeviceControllerMixin:
         self.status.set("disconnecting socket")
         self._ui_log("socket disconnect requested")
 
+    def stop_streaming(self) -> None:
+        if self.selected_device is None:
+            return
+        device_id, api_base = self.selected_device.id, self._api_base()
+        target = self.__dict__.get("_calibration_target")
+        recording = self.__dict__.get("_calibration_started") is not None and (
+            target is None or target[1] == device_id)
+        if recording:
+            self._cancel_calibration_timer()
+            self.calibration_progress.set(0)
+            self.calibration_text.set("Shot noise · 10 s")
+            with self.cluster_lock:
+                self.cluster_processor.clear_calibration()
+        self.stream_stopped = True
+
+        def work() -> list[Device]:
+            try:
+                if recording:
+                    self._api_for_base(api_base, "POST",
+                        f"/api/v1/devices/{device_id}/nullifiers/commands",
+                        {"command": "clear_calibration"})
+                self._api_for_base(api_base, "POST", f"/api/v1/devices/{device_id}/stop")
+                return self._load_devices(api_base)
+            except Exception:
+                self.stream_stopped = False
+                raise
+
+        def apply(devices: list[Device]) -> None:
+            self._apply_loaded_devices(devices)
+            self._select_device_by_id(device_id)
+            self.status.set("Streaming stopped")
+
+        self._run_busy("Stopping streaming", work, apply)
+
     def disconnect_selected(self) -> None:
         if self.selected_device is None:
             messagebox.showerror("No device", "Select a Red Pitaya first.")
             return
         device_id = self.selected_device.id
+        target = self.__dict__.get("_calibration_target")
+        if "_calibration_started" in self.__dict__ and (target is None or target[1] == device_id):
+            self._cancel_calibration_timer()
+            self.calibration_progress.set(0.0)
+            self.calibration_text.set("Shot noise · 10 s")
         api_base = self._api_base()
         self._ui_log("disconnect clicked", device_id=device_id)
         self.disconnect_socket()
@@ -348,4 +409,118 @@ class DeviceControllerMixin:
             else CONNECTION_FAILED_SPECTRUM_NOTICE
             if self.connection_failure_active
             else "Waiting for spectrum data"
+        )
+
+    def _load_devices(self, api_base: str) -> list[Device]:
+        return EngineClient(api_base).devices()
+
+    def _apply_loaded_devices(self, devices: list[Device]) -> None:
+        self.devices = devices
+        self._render_devices()
+        socket_alive = self.socket_thread is not None and self.socket_thread.is_alive()
+        self._set_engine_status("ok")
+        self.status.set("connected" if socket_alive else "disconnected")
+        self._ui_log("device list updated", count=len(devices), socket_alive=socket_alive)
+
+    def _render_devices(self) -> None:
+        selected_id = self.selected_device.id if self.selected_device is not None else None
+        for item in self.device_list.get_children():
+            self.device_list.delete(item)
+        self.device_list.tag_configure("streaming", foreground=COLORS["success"])
+        self.device_list.tag_configure("warning", foreground=COLORS["warning"])
+        self.device_list.tag_configure("offline", foreground=COLORS["text_secondary"])
+        self.device_list.tag_configure("empty", foreground=COLORS["text_disabled"])
+        for device in self.devices:
+            state_label, tag = self._device_state_label(device.state)
+            channels = (
+                "/".join(
+                    label
+                    for label, enabled in (
+                        ("CH1", device.channel_1_enabled),
+                        ("CH2", device.channel_2_enabled),
+                    )
+                    if enabled
+                )
+                or "None"
+            )
+            self.device_list.insert(
+                "",
+                tk.END,
+                iid=device.id,
+                text=f"{device.name}\n{device.host}",
+                values=(state_label, channels),
+                tags=(tag,),
+            )
+        if not self.devices:
+            self.device_list.insert(
+                "",
+                tk.END,
+                iid="__empty__",
+                text="No devices registered\nUse Add device to begin",
+                values=("", ""),
+                tags=("empty",),
+            )
+            self.selected_device = None
+            self.selected.set("-")
+        elif selected_id and (selected := self._device_by_id(selected_id)) is not None:
+            self.selected_device = selected
+            self.device_list.selection_set(selected_id)
+            self.device_list.see(selected_id)
+        if hasattr(self, "redpitaya_menu"):
+            self._populate_redpitaya_menu()
+        self._update_connect_controls()
+        self._draw_tabs()
+
+    @staticmethod
+    def _device_state_label(state: str) -> tuple[str, str]:
+        normalized = str(state or "").lower()
+        if normalized == "streaming":
+            return "● Streaming", "streaming"
+        if normalized == "ready":
+            return "● Ready", "streaming"
+        if normalized in {"starting", "connecting", "reconnecting"}:
+            return f"◐ {normalized.capitalize()}", "warning"
+        if normalized in DISCONNECTED_STATES:
+            return "○ Offline", "offline"
+        return f"! {normalized.capitalize() or 'Unknown'}", "warning"
+
+    def _select_from_list(self, _event: tk.Event[ttk.Treeview]) -> None:
+        selection = self.device_list.selection()
+        if not selection:
+            return
+        device_id = selection[0]
+        if device_id == "__empty__":
+            self.device_list.selection_remove(device_id)
+            return
+        selected = self._device_by_id(device_id)
+        if selected is None:
+            return
+        self.selected_device = selected
+        self.selected.set(f"{self.selected_device.name} ({self.selected_device.host})")
+        self._sync_acquisition_controls(self.selected_device)
+        self._populate_redpitaya_menu()
+        self._update_connect_controls()
+        self._draw_tabs()
+
+    def _select_device_by_id(self, device_id: str) -> None:
+        for device in self.devices:
+            if device.id == device_id:
+                self.device_list.selection_set(device_id)
+                self.device_list.see(device_id)
+                self.selected_device = device
+                self.selected.set(f"{device.name} ({device.host})")
+                self._sync_acquisition_controls(device)
+                self._populate_redpitaya_menu()
+                self._update_connect_controls()
+                self._draw_tabs()
+                return
+
+    def refresh_devices(self) -> None:
+        self.status.set("loading devices")
+        api_base = self._api_base()
+        self._ui_log("refresh devices clicked", api_base=api_base)
+        self._run_busy(
+            "Refreshing Red Pitayas",
+            lambda: self._load_devices(api_base),
+            self._apply_loaded_devices,
         )

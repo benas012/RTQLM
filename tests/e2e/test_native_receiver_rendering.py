@@ -12,13 +12,17 @@ import numpy as np
 import pytest
 
 from apps.native_receiver import native_receiver as nr
+from apps.native_receiver.constants import COLORS, HISTORY_MAX_SAMPLES, MAX_POINTS, TIME_ZOOM_MIN
+from apps.native_receiver.helpers import sample_range, start_display_timer
+from apps.native_receiver.protocol import SampleFrame
+from apps.native_receiver.settings import AppSettings
 
 
 @contextmanager
 def receiver() -> Iterator[nr.ReceiverApp]:
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(
-            nr, "load_settings", lambda: nr.AppSettings(launch_engine_on_start=False)
+            nr, "load_settings", lambda: AppSettings(launch_engine_on_start=False)
         )
         monkeypatch.setattr(nr.ReceiverApp, "refresh_devices", lambda self: None)
         monkeypatch.setattr(nr.ReceiverApp, "_ping_engine_status_async", lambda self: None)
@@ -32,11 +36,11 @@ def receiver() -> Iterator[nr.ReceiverApp]:
             app.destroy()
 
 
-def noisy_frame(count: int = 65536) -> nr.SampleFrame:
+def noisy_frame(count: int = 65536) -> SampleFrame:
     rng = np.random.default_rng(42)
     ch1 = rng.integers(-30000, 30000, count, dtype=np.int16)
     ch2 = rng.integers(-30000, 30000, count, dtype=np.int16)
-    return nr.SampleFrame(3, 1, 488281.25, len(ch1), 0, 0, 0, memoryview(ch1), memoryview(ch2))
+    return SampleFrame(3, 1, 488281.25, len(ch1), 0, 0, 0, memoryview(ch1), memoryview(ch2))
 
 
 def check_live_traces(receiver: nr.ReceiverApp) -> None:
@@ -55,7 +59,7 @@ def check_live_traces(receiver: nr.ReceiverApp) -> None:
     assert app.canvas.find_withtag("signal_ch1") == ch1
     assert app.canvas.find_withtag("signal_ch2") == ch2
     assert app.spectrum_canvas.find_withtag("spectrum_trace") == spectrum
-    assert len(app.canvas.coords(ch1)) <= nr.MAX_POINTS * 2
+    assert len(app.canvas.coords(ch1)) <= MAX_POINTS * 2
     assert not app.signal_notice_items
 
     app.toggle_display_channel(2)
@@ -71,7 +75,7 @@ def check_live_traces(receiver: nr.ReceiverApp) -> None:
     app._redraw_latest_spectrum()
     assert app.spectrum_canvas.find_withtag("spectrum_trace") == spectrum
     assert app.spectrum_canvas.itemcget(spectrum, "state") == "normal"
-    assert app.spectrum_canvas.itemcget(spectrum, "fill") == nr.COLORS["ch2"]
+    assert app.spectrum_canvas.itemcget(spectrum, "fill") == COLORS["ch2"]
 
     before = app.canvas.coords(ch1)
     app.geometry("1400x900")
@@ -88,7 +92,7 @@ def check_trigger_overlay_reuse(app: nr.ReceiverApp) -> None:
     phase = np.linspace(0, 16 * np.pi, count, endpoint=False)
     ch1 = (np.sin(phase) * 2000).astype(np.int16)
     ch2 = np.zeros(count, dtype=np.int16)
-    original = nr.SampleFrame(
+    original = SampleFrame(
         3,
         1,
         488281.25,
@@ -144,7 +148,7 @@ def check_trigger_directions_and_noise_hold(app: nr.ReceiverApp) -> None:
         t = np.arange((sequence - 1) * count, sequence * count)
         ch1 = (2000 * np.sin(t * 2 * np.pi / 97.3)).astype(np.int16)
         ch2 = (2000 * np.cos(t * 2 * np.pi / 97.3)).astype(np.int16)
-        frame = nr.SampleFrame(3, sequence, 1000, count, 0, 0, 0,
+        frame = SampleFrame(3, sequence, 1000, count, 0, 0, 0,
                                memoryview(ch1), memoryview(ch2))
         app.latest_frame = frame
         app.sample_history.append(frame)
@@ -194,7 +198,7 @@ def check_ui_callbacks(receiver: nr.ReceiverApp) -> None:
     app.frames.trace_add("write", lambda *_: stats_updates.append(app.frames.get()))
     handle_frame = app._handle_frame
 
-    def render(frame: nr.SampleFrame, count: int) -> None:
+    def render(frame: SampleFrame, count: int) -> None:
         renders.append(time.perf_counter())
         handle_frame(frame, count)
 
@@ -225,12 +229,12 @@ def check_ui_callbacks(receiver: nr.ReceiverApp) -> None:
     assert 2 <= len(stats_updates) <= 7
     assert len(app.canvas.find_withtag("signal_trace")) == 2
     assert app.script_status.get() == "signal script disabled"
-    assert app.sample_history.size <= nr.HISTORY_MAX_SAMPLES
+    assert app.sample_history.size <= HISTORY_MAX_SAMPLES
 
 
 def check_history_zoom(app: nr.ReceiverApp) -> None:
     original = noisy_frame(4096)
-    batches = nr.HISTORY_MAX_SAMPLES // original.samples_per_channel
+    batches = HISTORY_MAX_SAMPLES // original.samples_per_channel
     for sequence in range(1, batches + 1):
         app.latest_frame = replace(original, sequence=sequence)
         app.sample_history.append(app.latest_frame)
@@ -244,14 +248,14 @@ def check_history_zoom(app: nr.ReceiverApp) -> None:
     )
     for _ in range(8):
         app.zoom_time(0.5)
-    assert app.time_zoom == nr.TIME_ZOOM_MIN
-    assert app.axis_samples_per_channel == nr.HISTORY_MAX_SAMPLES
+    assert app.time_zoom == TIME_ZOOM_MIN
+    assert app.axis_samples_per_channel == HISTORY_MAX_SAMPLES
     assert app.axis_samples_per_channel / original.sample_rate_hz * 1000 == pytest.approx(
         34359.738368
     )
     assert sum(buffer.nbytes for buffer in app.sample_history.channels.values()) == 64 * 1024**2
     assert app.time_zoom_label.get() != "0.0x"
-    assert len(app.canvas.coords("signal_ch1")) <= nr.MAX_POINTS * 2
+    assert len(app.canvas.coords("signal_ch1")) <= MAX_POINTS * 2
     app.fit_time()
     assert app.axis_samples_per_channel == 4096
     app._clear_live_plot()
@@ -277,7 +281,7 @@ def check_partial_history_and_pause(app: nr.ReceiverApp) -> None:
     assert app.display_paused
     assert app.pause_label.get() == "Resume live"
     assert "acquisition continues" in app.display_detail.get()
-    frozen = app.paused_history.plot_channels(nr.HISTORY_MAX_SAMPLES)[0].copy()
+    frozen = app.paused_history.plot_channels(HISTORY_MAX_SAMPLES)[0].copy()
     frozen_coords = app.canvas.coords("signal_ch1")
     newer = replace(original, sequence=2, channel_1=memoryview(-np.asarray(original.channel_1)))
     app.latest_frame = newer
@@ -288,7 +292,7 @@ def check_partial_history_and_pause(app: nr.ReceiverApp) -> None:
     assert app._view_frame() is original
     assert app.sample_history.size == original.samples_per_channel * 2
     np.testing.assert_array_equal(
-        app.paused_history.plot_channels(nr.HISTORY_MAX_SAMPLES)[0], frozen
+        app.paused_history.plot_channels(HISTORY_MAX_SAMPLES)[0], frozen
     )
     app.zoom_time(2)
     assert app._view_frame() is original
@@ -318,9 +322,9 @@ def run_scenario(scenario: str) -> None:
             check_partial_history_and_pause(app)
         else:
             if scenario == "history_callbacks":
-                app.time_zoom = nr.TIME_ZOOM_MIN
+                app.time_zoom = TIME_ZOOM_MIN
                 app.display_mode.set("Live")
-            release_timer = nr.start_display_timer()
+            release_timer = start_display_timer()
             try:
                 check_ui_callbacks(app)
             finally:
@@ -351,4 +355,4 @@ def test_native_rendering(scenario: str) -> None:
 def test_range_includes_peaks_between_display_points() -> None:
     values = np.zeros(65536)
     values[1], values[-2] = -0.8, 0.9
-    assert nr.sample_range(values) == (-0.8, 0.9)
+    assert sample_range(values) == (-0.8, 0.9)

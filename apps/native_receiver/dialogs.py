@@ -12,10 +12,6 @@ if TYPE_CHECKING:
     from apps.native_receiver.native_receiver import ReceiverApp
 
 
-class ApiError(RuntimeError):
-    pass
-
-
 def configure_ui_logging() -> None:
     if not UI_LOGGER.handlers:
         handler = logging.StreamHandler(sys.stdout)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
@@ -30,11 +30,13 @@ SourceFactory = Callable[[Settings], AcquisitionSource]
 
 class AcquisitionManager:
     def __init__(
-        self, settings: Settings, source_factory: SourceFactory, broadcaster: Broadcaster
+        self, settings: Settings, source_factory: SourceFactory, broadcaster: Broadcaster,
+        *, frame_handler: Callable[[RawSampleFrame], Awaitable[None]] | None = None,
     ) -> None:
         self.settings = settings
         self._source_factory = source_factory
         self.broadcaster = broadcaster
+        self._frame_handler = frame_handler
         self.metrics = AcquisitionMetrics()
         self.state = AcquisitionState.STOPPED
         self.connected = False
@@ -209,6 +211,8 @@ class AcquisitionManager:
                     message = serialize_frame(frame)
                     self.broadcaster.publish(message)
                     self.metrics.frames_published += 1
+                    if self._frame_handler is not None:
+                        await self._frame_handler(frame)
                 except ValueError as exc:
                     self.metrics.malformed_packets += 1
                     logger.warning("invalid frame rejected: %s", exc)

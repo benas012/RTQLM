@@ -10,6 +10,10 @@ from typing import Any
 import pytest
 
 from apps.native_receiver import native_receiver as nr
+from apps.native_receiver.api_client import EngineClient
+from apps.native_receiver.constants import CONNECTION_OVERLAY_BG
+from apps.native_receiver.protocol import Device
+from apps.native_receiver.settings import AppSettings
 
 
 def check_slow_redpitaya_connect_keeps_tk_ui_responsive(
@@ -18,11 +22,11 @@ def check_slow_redpitaya_connect_keeps_tk_ui_responsive(
     monkeypatch.setattr(
         nr,
         "load_settings",
-        lambda: nr.AppSettings(launch_engine_on_start=False),
+        lambda: AppSettings(launch_engine_on_start=False),
     )
     monkeypatch.setattr(nr.ReceiverApp, "refresh_devices", lambda self: None)
     monkeypatch.setattr(
-        nr.ReceiverApp, "_engine_is_running_for_base", lambda self, _base: False,
+        EngineClient, "is_running", lambda self: False,
     )
     app = nr.ReceiverApp()
     try:
@@ -30,7 +34,7 @@ def check_slow_redpitaya_connect_keeps_tk_ui_responsive(
         # Complete the initial window mapping before measuring a user's Connect action.
         app.update()
         assert "disabled" in app.connect_button.state()
-        device = nr.Device(
+        device = Device(
             id="11111111-1111-1111-1111-111111111111",
             name="RP slow",
             host="rp-slow.local",
@@ -92,13 +96,13 @@ def check_slow_redpitaya_connect_keeps_tk_ui_responsive(
         assert app.cget("cursor") == ""
         assert app.connection_overlay is not None
         assert app.connection_overlay.winfo_ismapped()
-        assert app.connection_overlay.cget("bg") == nr.CONNECTION_OVERLAY_BG
-        assert nr.CONNECTION_OVERLAY_BG != "#000000"
+        assert app.connection_overlay.cget("bg") == CONNECTION_OVERLAY_BG
+        assert CONNECTION_OVERLAY_BG != "#000000"
         assert app.connection_overlay_bg_rect is not None
         assert app.connection_overlay_canvas is not None
         assert (
             app.connection_overlay_canvas.itemcget(app.connection_overlay_bg_rect, "fill")
-            == nr.CONNECTION_OVERLAY_BG
+            == CONNECTION_OVERLAY_BG
         )
         assert app.connection_overlay_title.get() == "Connecting to Red Pitaya"
         app._show_toast(

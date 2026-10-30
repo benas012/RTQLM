@@ -15,6 +15,12 @@ The shared `src/redpitaya_acquisition` package is the hardware-facing acquisitio
 engine. It contains the simulator, Red Pitaya integration, frame model, binary encoder, loss metrics,
 and bounded streaming queues; it is not a third application.
 
+For **nullifier calculation on the Red Pitaya ARM CPU**, the
+[native C processor](native/redpitaya_nullifiers/README.md) accepts formulas and calibration
+commands over SSH and calculates derived results from the continuous ADC stream on the board.
+Enable the installed backend in `.env`; the existing receiver controls then use its C results.
+Diagnostic two-channel DMA bursts remain available through the `capture` command.
+
 ## Quick start
 
 ```powershell

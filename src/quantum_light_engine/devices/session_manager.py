@@ -62,6 +62,7 @@ class DeviceSessionManager:
         session = self.require(device_id)
         if session.state is not DeviceSessionState.DISCONNECTED:
             raise RuntimeError("a connected device cannot be deleted")
+        await session.trigger.stop()
         await self.repository.delete(device_id)
         del self._sessions[device_id]
 

@@ -2,10 +2,22 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
+from typing import Any
+
+import numpy as np
 
 from apps.native_receiver.constants import (
     COLORS,
+    CONNECTION_FAILED_SPECTRUM_NOTICE,
+    CONNECTION_OVERLAY_BUSY_LABELS,
     DIMENSIONS,
+    SPECTRUM_MIN_INTERVAL_MS,
+)
+from apps.native_receiver.helpers import (
+    compute_spectrum,
+    draw_spectrum_line,
+    format_frequency,
+    time_monotonic_ns,
 )
 from apps.native_receiver.nullifier_ui import NullifierMonitorPanel
 
@@ -13,13 +25,13 @@ from apps.native_receiver.nullifier_ui import NullifierMonitorPanel
 class SpectrumUiMixin:
     def _build_spectrum_panel(self, main: ttk.Frame) -> None:
         self.analysis_notebook = ttk.Notebook(main, style="Analysis.TNotebook", height=290)
-        self.analysis_notebook.grid(row=8, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.analysis_notebook.grid(row=8, column=0, sticky="nsew")
         spectrum_tab = ttk.Frame(self.analysis_notebook, style="Surface.TFrame")
         spectrum_tab.columnconfigure(0, weight=1)
         spectrum_tab.rowconfigure(1, weight=1)
         self.analysis_notebook.add(spectrum_tab, text="Spectrum analyzer")
         self.nullifier_panel = NullifierMonitorPanel(self.analysis_notebook, self)
-        self.analysis_notebook.add(self.nullifier_panel, text="Nullifiers")
+        self.analysis_notebook.add(self.nullifier_panel, text="Mode analysis")
         self.analysis_notebook.select(self.nullifier_panel)
         self.analysis_notebook.bind("<<NotebookTabChanged>>", self._analysis_tab_changed)
         spectrum_controls = ttk.Frame(spectrum_tab, style="Toolbar.TFrame", padding=(12, 8))
@@ -100,12 +112,198 @@ class SpectrumUiMixin:
         self.spectrum_canvas.bind("<Configure>", self._resize_spectrum_plot)
         self._set_spectrum_notice("Waiting for spectrum data")
 
-    def _analysis_tab_changed(self, _event: tk.Event) -> None:
+    def _analysis_tab_changed(self, _event: tk.Event | None) -> None:
         nullifiers_visible = self.analysis_notebook.select() == str(self.nullifier_panel)
-        self.main_surface.rowconfigure(5, weight=5 if nullifiers_visible else 7)
-        self.main_surface.rowconfigure(
-            8, weight=5 if nullifiers_visible else 3, minsize=330 if nullifiers_visible else 0
+        self.plot_split.paneconfigure(
+            self.analysis_surface, minsize=410 if nullifiers_visible else 240
         )
         self.minsize(
-            DIMENSIONS["min_width"], 700 if nullifiers_visible else DIMENSIONS["min_height"]
+            DIMENSIONS["min_width"], 740 if nullifiers_visible else DIMENSIONS["min_height"]
         )
+
+    def _redraw_spectrum_grid(self) -> None:
+        for item in self.spectrum_grid_items:
+            self.spectrum_canvas.delete(item)
+        self.spectrum_grid_items.clear()
+        width = max(self.spectrum_canvas.winfo_width(), 1)
+        height = max(self.spectrum_canvas.winfo_height(), 1)
+        left_pad = 56
+        bottom_pad = 24
+        plot_width = max(width - left_pad - 8, 1)
+        plot_height = max(height - bottom_pad - 8, 1)
+
+        for index in range(11):
+            x = left_pad + index * plot_width / 10
+            self.spectrum_grid_items.append(
+                self.spectrum_canvas.create_line(x, 0, x, plot_height, fill=COLORS["grid"])
+            )
+        for index in range(7):
+            y = index * plot_height / 6
+            self.spectrum_grid_items.append(
+                self.spectrum_canvas.create_line(left_pad, y, width, y, fill=COLORS["grid"])
+            )
+
+        scale = self.spectrum_scale.get()
+        top_label = "0 dBFS" if scale == "dBFS" else "max"
+        bottom_label = "-120" if scale == "dBFS" else "0"
+        self.spectrum_grid_items.append(
+            self.spectrum_canvas.create_text(
+                left_pad - 8,
+                10,
+                text=top_label,
+                fill=COLORS["muted"],
+                anchor="e",
+                font=("Consolas", 8),
+            )
+        )
+        self.spectrum_grid_items.append(
+            self.spectrum_canvas.create_text(
+                left_pad - 8,
+                plot_height - 3,
+                text=bottom_label,
+                fill=COLORS["muted"],
+                anchor="e",
+                font=("Consolas", 8),
+            )
+        )
+        self.spectrum_grid_items.append(
+            self.spectrum_canvas.create_text(
+                left_pad,
+                plot_height + 13,
+                text="0 Hz",
+                fill=COLORS["muted"],
+                anchor="n",
+                font=("Consolas", 8),
+            )
+        )
+        self.spectrum_grid_items.append(
+            self.spectrum_canvas.create_text(
+                left_pad + plot_width,
+                plot_height + 13,
+                text=format_frequency(self.spectrum_axis_sample_rate_hz / 2),
+                fill=COLORS["muted"],
+                anchor="n",
+                font=("Consolas", 8),
+            )
+        )
+
+        for item in self.spectrum_grid_items:
+            self.spectrum_canvas.tag_lower(item)
+        with self.frame_lock:
+            has_frame = self.latest_frame is not None
+        if self.loading_active and self.loading_label not in CONNECTION_OVERLAY_BUSY_LABELS:
+            self._set_spectrum_notice(self.loading_label)
+        elif self.connection_failure_active:
+            self._set_spectrum_notice(CONNECTION_FAILED_SPECTRUM_NOTICE)
+        elif not has_frame:
+            self._set_spectrum_notice("Waiting for spectrum data")
+
+    def _draw_spectrum(
+        self,
+        channel_1: Any,
+        channel_2: Any,
+        sample_rate_hz: float,
+        *,
+        force: bool = False,
+    ) -> None:
+        now = time_monotonic_ns()
+        if (
+            not force
+            and now - self.last_spectrum_monotonic_ns < SPECTRUM_MIN_INTERVAL_MS * 1_000_000
+        ):
+            return
+        self.last_spectrum_monotonic_ns = now
+
+        for item in self.spectrum_trace_items:
+            self.spectrum_canvas.delete(item)
+        self.spectrum_trace_items.clear()
+        self._clear_spectrum_notice()
+
+        channel_name = self.spectrum_channel.get()
+        samples = channel_2 if channel_name == "CH2" else channel_1
+        color = COLORS["ch2"] if channel_name == "CH2" else COLORS["ch1"]
+        axis_changed = (
+            sample_rate_hz != self.spectrum_axis_sample_rate_hz
+            or self.spectrum_scale.get() != self.spectrum_axis_scale
+        )
+        self.spectrum_axis_sample_rate_hz = sample_rate_hz
+        self.spectrum_axis_scale = self.spectrum_scale.get()
+        if not self.spectrum_grid_items or axis_changed:
+            self._redraw_spectrum_grid()
+
+        if samples is None or len(samples) < 2:
+            self.spectrum_canvas.itemconfigure("spectrum_trace", state="hidden")
+            self.spectrum_peak.set("Peak: -")
+            self.spectrum_trace_items.append(
+                self.spectrum_canvas.create_text(
+                    68,
+                    24,
+                    text=f"{channel_name} is not enabled",
+                    fill=COLORS["muted"],
+                    anchor="w",
+                )
+            )
+            return
+
+        spectrum = compute_spectrum(samples, sample_rate_hz, int(self.spectrum_fft_size.get()))
+        if spectrum is None:
+            self.spectrum_canvas.itemconfigure("spectrum_trace", state="hidden")
+            self.spectrum_peak.set("Peak: -")
+            return
+
+        width = max(self.spectrum_canvas.winfo_width(), 1)
+        height = max(self.spectrum_canvas.winfo_height(), 1)
+        left_pad = 56
+        bottom_pad = 24
+        plot_width = max(width - left_pad - 8, 1)
+        plot_height = max(height - bottom_pad - 8, 1)
+        use_db = self.spectrum_scale.get() == "dBFS"
+        magnitudes = spectrum["magnitudes"]
+
+        if use_db:
+            values = 20 * np.log10(np.maximum(magnitudes, 1e-12))
+            normalized = np.clip((values + 120.0) / 120.0, 0.0, 1.0)
+        else:
+            maximum = max(float(np.max(magnitudes)), 1e-12)
+            normalized = np.clip(magnitudes / maximum, 0.0, 1.0)
+
+        draw_spectrum_line(
+            self.spectrum_canvas,
+            normalized,
+            color,
+            plot_width,
+            plot_height,
+            left_pad,
+        )
+        self.spectrum_peak.set(
+            f"Peak: {format_frequency(float(spectrum['peak_hz']))} / "
+            f"{float(spectrum['peak_db']):.1f} dBFS"
+        )
+
+    def _resize_spectrum_plot(self, _event: tk.Event[Any]) -> None:
+        if self.spectrum_resize_after_id is not None:
+            try:
+                self.after_cancel(self.spectrum_resize_after_id)
+            except tk.TclError:
+                pass
+        self.spectrum_resize_after_id = self.after_idle(self._finish_spectrum_resize)
+
+    def _finish_spectrum_resize(self) -> None:
+        self.spectrum_resize_after_id = None
+        self._redraw_spectrum_grid()
+        self._redraw_latest_spectrum()
+
+    def _redraw_latest_spectrum(self) -> None:
+        frame = self._view_frame()
+        if frame is None:
+            self._redraw_spectrum_grid()
+            return
+        try:
+            if self._signal_script_active():
+                frame = self._frame_for_signal(frame)
+            channel_1, channel_2 = self._processed_channels(frame)
+            self._draw_spectrum(channel_1, channel_2, frame.sample_rate_hz, force=True)
+        except Exception as exc:
+            self.signal_processor = None
+            self.script_status.set(f"signal script disabled: {exc}")
+            self.status.set("signal script error")

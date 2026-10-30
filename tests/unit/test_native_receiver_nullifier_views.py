@@ -12,7 +12,7 @@ from apps.native_receiver.nullifier_acquisition import (
     acquisition_description,
     match_builtin_basis,
 )
-from apps.native_receiver.nullifier_renderer import finite_runs, select_nullifier_traces
+from apps.native_receiver.nullifier_renderer import clip_trace, finite_runs, select_nullifier_traces
 from quantum_light_engine.post_processing import (
     DEFAULT_CLUSTER_P,
     DEFAULT_CLUSTER_X,
@@ -32,6 +32,14 @@ def test_chart_keeps_collection_gaps_and_rejected_modes_disconnected() -> None:
     runs = finite_runs([1.0, 2.0, np.nan, np.nan, 3.0, np.inf, 4.0, 5.0])
     assert [positions.tolist() for positions, _values in runs] == [[0, 1], [4], [6, 7]]
     assert [values.tolist() for _positions, values in runs] == [[1.0, 2.0], [3.0], [4.0, 5.0]]
+
+
+def test_zoomed_chart_clips_at_real_intersections_without_flattening_outliers() -> None:
+    lines = clip_trace([0, 1, 2, 3, 4], [0, 2, 3, 2, 0], -1, 1)
+    assert len(lines) == 2
+    np.testing.assert_array_equal(lines[0], [[0, 0], [0.5, 1]])
+    np.testing.assert_array_equal(lines[1], [[3.5, 1], [4, 0]])
+    assert clip_trace([0, 1], [5, 5], -1, 1) == []
 
 
 def test_ensemble_chart_downsampling_covers_full_window_and_preserves_gaps() -> None:

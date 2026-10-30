@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping
+from dataclasses import asdict, dataclass, field, fields, replace
 from functools import partial
 from itertools import pairwise
-from typing import TypeAlias, TypedDict
+from typing import Any, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
@@ -15,12 +15,8 @@ from quantum_light_engine.ensemble_variance import EnsembleNullifierVariance
 FloatArray: TypeAlias = npt.NDArray[np.float64]
 
 
-class _AcquisitionMetadata(TypedDict):
-    measurement_basis: str
-    acquisition_state: str
-    collection_windows: int
-    accepted_samples: int
-    skipped_samples: int
+def _empty_quadratures() -> dict[str, FloatArray]:
+    return {name: np.empty(0, dtype=np.float64) for name in ("a", "b")}
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,23 +34,14 @@ class NullifierSpec:
 
 
 DEFAULT_CLUSTER_X = NullifierSpec(
-    name="cluster_x",
-    terms=(
-        NullifierTerm("a", 0, 1.0),
-        NullifierTerm("a", 1, -1.0),
-        NullifierTerm("b", 0, 1.0),
-        NullifierTerm("b", 1, 1.0),
-    ),
+    "cluster_x",
+    (NullifierTerm("a", 0, 1.0), NullifierTerm("a", 1, -1.0),
+     NullifierTerm("b", 0, 1.0), NullifierTerm("b", 1, 1.0)),
 )
-
 DEFAULT_CLUSTER_P = NullifierSpec(
-    name="cluster_p",
-    terms=(
-        NullifierTerm("a", 0, 1.0),
-        NullifierTerm("a", 1, 1.0),
-        NullifierTerm("b", 0, 1.0),
-        NullifierTerm("b", 1, -1.0),
-    ),
+    "cluster_p",
+    (NullifierTerm("a", 0, 1.0), NullifierTerm("a", 1, 1.0),
+     NullifierTerm("b", 0, 1.0), NullifierTerm("b", 1, -1.0)),
 )
 
 LAB_CLUSTER_X = NullifierSpec(
@@ -75,11 +62,7 @@ SINGLE_MODE_B = NullifierSpec("CH2", (NullifierTerm("b"),))
 
 @dataclass(frozen=True, slots=True)
 class ClusterProcessingConfig:
-    """Configuration for same-basis, two-channel cluster-state processing.
-
-    ``channel_b_delay_samples`` is the measured delay of channel B relative to
-    channel A. Positive values pair A[n] with B[n + delay].
-    """
+    """Same-basis processing; positive B delay pairs A[n] with B[n + delay]."""
 
     mode_width_seconds: float = 247e-9
     measurement_frequency_hz: float = 2.7e6
@@ -97,9 +80,7 @@ class ClusterProcessingConfig:
     channel_b_delay_samples: int = 0
     gate_absolute_threshold: float | None = None
     explicit_mode_template: tuple[float, ...] = ()
-    nullifiers: tuple[NullifierSpec, ...] = field(
-        default_factory=lambda: (DEFAULT_CLUSTER_X,)
-    )
+    nullifiers: tuple[NullifierSpec, ...] = (DEFAULT_CLUSTER_X,)
     history_modes: int = 5_000
     window_mode: str = "continuous"
     lock_seconds: float = 0.005
@@ -161,9 +142,6 @@ class ClusterProcessingConfig:
             if value is not None and (isinstance(value, bool)
                     or not isinstance(value, (int, np.integer)) or value < 2):
                 raise ValueError(f"{name} must be an integer of at least 2")
-        if self.mode_shape == "identity" and self.mode_samples is None \
-                and not self.explicit_mode_template:
-            raise ValueError("identity mode requires N_mode samples")
         if self.measurement_basis not in {"x", "p"}:
             raise ValueError("measurement_basis must be x or p")
         if self.window_mode not in {"continuous", "periodic", "triggered"}:
@@ -213,9 +191,8 @@ class ClusterProcessingConfig:
 class ClusterProcessingResult:
     """Processed display data.
 
-    ``mode_index_start`` anchors amplitude history in accepted-mode indices.
-    Ensemble variance uses local within-collection indices instead, starting at
-    ``variance_index_starts[name]`` for each configured formula.
+    Amplitudes start at accepted-mode index ``mode_index_start``; ensemble
+    variances use local collection indices from ``variance_index_starts``.
     """
 
     mode_period_seconds: float
@@ -240,11 +217,11 @@ class ClusterProcessingResult:
     analysis_mode: str = "cluster"
     mode_samples: int = 0
     variance_window_modes: int = 0
+    display_stride: int = 1
 
 
 def build_gauss_lin_cos_mode(
-    mode_width_seconds: float,
-    measurement_frequency_hz: float,
+    mode_width_seconds: float, measurement_frequency_hz: float,
     time_axis_seconds: npt.NDArray[np.floating],
 ) -> FloatArray:
     """Build the Gaussian-linear-cosine mode for a frequency in hertz."""
@@ -295,17 +272,14 @@ def single_mode_processing_config(
     mode_samples: int | None = None, variance_window_modes: int = 100,
 ) -> ClusterProcessingConfig:
     """Lab-shaped rail squeezing, or a flat mode with an explicit sample count."""
-    return ClusterProcessingConfig(
+    return replace(
+        lab_processing_config(),
         analysis_mode="single", mode_samples=mode_samples,
-        mode_width_seconds=308e-9, measurement_frequency_hz=6e6,
         mode_shape="lab_gaussian_linear_cosine" if mode_samples is None else "identity",
-        mode_oversample=1000, min_samples_per_mode=4 if mode_samples is None else 2,
+        min_samples_per_mode=4 if mode_samples is None else 2,
         channel_b_delay_samples=2 if mode_samples is None else 0,
         variance_window_modes=variance_window_modes,
         calibration_estimator="pooled", variance_estimator="rolling",
-        nullifiers=(LAB_CLUSTER_X,), window_mode="periodic", history_modes=25_000,
-        collection_guard_seconds=6e-7 + 40 * 20e-6,
-        collection_end_guard_samples=1000,
     )
 
 
@@ -331,15 +305,22 @@ def _variance_points(config: ClusterProcessingConfig, period: float) -> int:
     return max(round(config.variance_window_seconds / period), 2)
 
 
+def mode_sample_count(width_seconds: float, sample_rate_hz: float, shape: str) -> int:
+    """Quantize a requested width using the selected template's sample-grid rule."""
+    if any(not np.isfinite(value) or value <= 0 for value in (width_seconds, sample_rate_hz)):
+        raise ValueError("mode width and sample rate must be positive and finite")
+    points = width_seconds / (1 / sample_rate_hz)
+    return (int(np.nextafter(points, np.inf)) if shape == "lab_gaussian_linear_cosine"
+            else round(points))
+
+
 def build_lab_mode_template(
     mode_width_seconds: float, measurement_frequency_hz: float, dt_seconds: float,
     *, oversample: int = 1000, min_samples_per_mode: int = 4,
 ) -> FloatArray:
-    """Reproduce build_long_mode_from_short in the supplied postprocessing script.
+    """Lab mode: cosine frequency has no 2*pi; center is a fine-grid sample.
 
-    In particular, its cosine uses frequency without 2*pi, the fine-grid center
-    is an actual array sample, and normalization precedes interpolation. The
-    integer truncation changes the tiled period; callers must report that period.
+    Normalize before interpolation and report the integer-truncated tiled period.
     """
     if any(not np.isfinite(value) or value <= 0 for value in (
         mode_width_seconds, measurement_frequency_hz, dt_seconds
@@ -347,7 +328,7 @@ def build_lab_mode_template(
         raise ValueError("mode parameters must be positive and finite")
     if oversample < 1:
         raise ValueError("oversample must be at least 1")
-    points = int(mode_width_seconds / dt_seconds)
+    points = mode_sample_count(mode_width_seconds, 1 / dt_seconds, "lab_gaussian_linear_cosine")
     if points < min_samples_per_mode:
         raise ValueError(
             f"temporal mode has only {points} samples; at least {min_samples_per_mode} "
@@ -368,11 +349,8 @@ def build_lab_mode_template(
 
 
 def validate_mode_sampling(
-    mode_width_seconds: float,
-    measurement_frequency_hz: float,
-    sample_rate_hz: float,
-    *,
-    min_samples_per_mode: int = 16,
+    mode_width_seconds: float, measurement_frequency_hz: float, sample_rate_hz: float,
+    *, min_samples_per_mode: int = 16,
 ) -> int:
     if sample_rate_hz <= 0:
         raise ValueError("sample_rate_hz must be positive")
@@ -390,12 +368,8 @@ def validate_mode_sampling(
 
 
 def build_mode_template(
-    mode_width_seconds: float,
-    measurement_frequency_hz: float,
-    dt_seconds: float,
-    *,
-    oversample: int = 32,
-    min_samples_per_mode: int = 2,
+    mode_width_seconds: float, measurement_frequency_hz: float, dt_seconds: float,
+    *, oversample: int = 32, min_samples_per_mode: int = 2,
 ) -> FloatArray:
     """Sample and normalize the analytic mode on the actual ADC sample grid."""
     if dt_seconds <= 0:
@@ -403,38 +377,27 @@ def build_mode_template(
     if oversample < 1:
         raise ValueError("oversample must be at least 1")
     points = validate_mode_sampling(
-        mode_width_seconds,
-        measurement_frequency_hz,
-        1 / dt_seconds,
+        mode_width_seconds, measurement_frequency_hz, 1 / dt_seconds,
         min_samples_per_mode=min_samples_per_mode,
     )
 
     offsets = (np.arange(oversample, dtype=np.float64) + 0.5) / oversample
-    fine_time = (
-        np.arange(points, dtype=np.float64)[:, np.newaxis] + offsets[np.newaxis, :]
-    ) * dt_seconds
+    fine_time = (np.arange(points, dtype=np.float64)[:, None] + offsets[None, :]) * dt_seconds
     fine_mode = build_gauss_lin_cos_mode(
-        mode_width_seconds,
-        measurement_frequency_hz,
-        fine_time.reshape(-1),
+        mode_width_seconds, measurement_frequency_hz, fine_time.reshape(-1),
     ).reshape(points, oversample)
     sampled = np.asarray(np.mean(fine_mode, axis=1, dtype=np.float64), dtype=np.float64)
     return normalize_mode(sampled, dt_seconds)
 
 
 def build_gauss_lin_mode_template(
-    mode_width_seconds: float,
-    bandwidth_hz: float,
-    dt_seconds: float,
-    *,
-    oversample: int = 32,
-    min_samples_per_mode: int = 16,
+    mode_width_seconds: float, bandwidth_hz: float, dt_seconds: float,
+    *, oversample: int = 32, min_samples_per_mode: int = 16,
 ) -> FloatArray:
     """Sample Larsen chapter 3, Eq. 3.25: N t exp(-kappa² t² / 2).
 
-    The support is one temporal bin of width tau, centered at zero. Bandwidth
-    gives kappa = 2 pi bandwidth; this Gaussian does not have a hard Nyquist
-    cutoff. The configured minimum sample count remains a resolution policy.
+    Support is one centered bin; kappa = 2 pi bandwidth. Minimum samples set
+    resolution, since this Gaussian has no hard Nyquist cutoff.
     """
     if not np.isfinite(dt_seconds) or dt_seconds <= 0:
         raise ValueError("dt_seconds must be positive and finite")
@@ -458,47 +421,6 @@ def build_gauss_lin_mode_template(
     return normalize_mode(sampled, dt_seconds)
 
 
-def tile_mode(mode_template: npt.NDArray[np.floating], total_points: int) -> FloatArray:
-    mode = np.asarray(mode_template, dtype=np.float64)
-    if mode.ndim != 1 or mode.size == 0:
-        raise ValueError("mode_template must be a non-empty 1-D array")
-    if total_points < 0:
-        raise ValueError("total_points must be non-negative")
-    if total_points == 0:
-        return np.empty(0, dtype=np.float64)
-    return np.asarray(np.resize(mode, total_points), dtype=np.float64)
-
-
-def apply_long_mode_to_trace(
-    signal: npt.NDArray[np.number],
-    long_mode: npt.NDArray[np.floating],
-    short_mode: npt.NDArray[np.floating],
-    dt_seconds: float,
-) -> tuple[FloatArray, FloatArray, int]:
-    if dt_seconds <= 0:
-        raise ValueError("dt_seconds must be positive")
-    values = np.asarray(signal, dtype=np.float64)
-    tiled = np.asarray(long_mode, dtype=np.float64)
-    mode = np.asarray(short_mode, dtype=np.float64)
-    if values.ndim != 1 or tiled.ndim != 1 or mode.ndim != 1:
-        raise ValueError("signal and modes must be 1-D arrays")
-    if mode.size == 0:
-        raise ValueError("short_mode must not be empty")
-    if tiled.size < values.size:
-        raise ValueError("long_mode must cover the full signal")
-
-    points_per_mode = mode.size
-    mode_count = values.size // points_per_mode
-    usable = mode_count * points_per_mode
-    modulated = np.zeros(values.size, dtype=np.float64)
-    if usable == 0:
-        return modulated, np.empty(0, dtype=np.float64), points_per_mode
-
-    modulated[:usable] = values[:usable] * tiled[:usable]
-    quadratures = modulated[:usable].reshape(mode_count, points_per_mode).sum(axis=1)
-    return modulated, np.asarray(quadratures * dt_seconds, dtype=np.float64), points_per_mode
-
-
 def rolling_variance(
     signal: npt.NDArray[np.number], window_points: int, *, lab_window: bool = False,
     require_full_window: bool = False,
@@ -518,13 +440,18 @@ def rolling_variance(
     starts = np.maximum(0, indices - left)
     stops = np.minimum(values.size, indices + right)
     finite = np.isfinite(values)
+    all_finite = bool(np.all(finite))
     # Center the signal to avoid cancellation for large DC offsets.
-    origin = float(values[np.flatnonzero(finite)[0]]) if np.any(finite) else 0.0
-    clean = np.where(finite, values - origin, 0.0)
-    prefix_count = np.concatenate(([0], np.cumsum(finite, dtype=np.int64)))
+    origin = float(values[finite.argmax()]) if np.any(finite) else 0.0
+    if all_finite:
+        clean = values - origin
+        counts = stops - starts
+    else:
+        clean = np.where(finite, values - origin, 0.0)
+        prefix_count = np.concatenate(([0], np.cumsum(finite, dtype=np.int64)))
+        counts = prefix_count[stops] - prefix_count[starts]
     prefix = np.concatenate(([0.0], np.cumsum(clean, dtype=np.float64)))
     prefix_sq = np.concatenate(([0.0], np.cumsum(clean * clean, dtype=np.float64)))
-    counts = prefix_count[stops] - prefix_count[starts]
     sums = prefix[stops] - prefix[starts]
     sums_sq = prefix_sq[stops] - prefix_sq[starts]
     output = np.full(values.size, np.nan, dtype=np.float64)
@@ -535,25 +462,8 @@ def rolling_variance(
     return output
 
 
-def shot_noise_cluster_coefficient(
-    quadrature_sets: Sequence[npt.NDArray[np.number]],
-) -> float:
-    variances = [
-        float(np.var(np.asarray(quadratures, dtype=np.float64)))
-        for quadratures in quadrature_sets
-        if np.asarray(quadratures).size > 1
-    ]
-    if not variances:
-        raise ValueError("at least one shot-noise quadrature set with two values is required")
-    mean_variance = float(np.mean(variances))
-    if mean_variance <= 0 or not np.isfinite(mean_variance):
-        raise ValueError("shot-noise variance must be positive and finite")
-    return float(1 / np.sqrt(2 * mean_variance))
-
-
 def compute_nullifier(
-    quadratures: Mapping[str, npt.NDArray[np.number]],
-    spec: NullifierSpec,
+    quadratures: Mapping[str, npt.NDArray[np.number]], spec: NullifierSpec,
 ) -> FloatArray:
     if not spec.terms:
         raise ValueError("nullifier spec must contain at least one term")
@@ -606,9 +516,7 @@ def cluster_squeezing_db(
 
 class _RunningMoments:
     def __init__(self) -> None:
-        self.count = 0
-        self.mean = 0.0
-        self.m2 = 0.0
+        self.clear()
 
     def clear(self) -> None:
         self.count = 0
@@ -641,9 +549,7 @@ class _LabWindowStatistics:
 
     def __init__(self, config: ClusterProcessingConfig) -> None:
         self.config = config
-        self.current: dict[str, FloatArray] = {
-            name: np.empty(0, dtype=np.float64) for name in ("a", "b")
-        }
+        self.current = _empty_quadratures()
         self.sums: dict[str, FloatArray] = {}
         self.db_sums: dict[str, FloatArray] = {}
         self.counts: dict[str, npt.NDArray[np.int64]] = {}
@@ -669,7 +575,7 @@ class _LabWindowStatistics:
             if calibrated:
                 db = cluster_squeezing_db(variance, nullifier_shot_noise_variance(spec))
                 self._add(spec.name, db, self.db_sums, self.db_counts)
-        self.current = {name: np.empty(0, dtype=np.float64) for name in ("a", "b")}
+        self.current = _empty_quadratures()
         self.completed += 1
 
     @staticmethod
@@ -677,14 +583,13 @@ class _LabWindowStatistics:
         name: str, values: FloatArray, sums: dict[str, FloatArray],
         counts: dict[str, npt.NDArray[np.int64]],
     ) -> None:
-        old = sums.get(name, np.empty(0, dtype=np.float64))
-        size = max(old.size, values.size)
         if name not in sums:
-            sums[name] = np.zeros(size, dtype=np.float64)
-            counts[name] = np.zeros(size, dtype=np.int64)
-        elif old.size < size:
-            sums[name] = np.pad(old, (0, size - old.size))
-            counts[name] = np.pad(counts[name], (0, size - old.size))
+            sums[name] = np.zeros(values.size, dtype=np.float64)
+            counts[name] = np.zeros(values.size, dtype=np.int64)
+        elif sums[name].size < values.size:
+            extra = values.size - sums[name].size
+            sums[name] = np.pad(sums[name], (0, extra))
+            counts[name] = np.pad(counts[name], (0, extra))
         # Zero variance means -inf dB and must remain -inf in the average.
         valid = ~np.isnan(values)
         indices = np.flatnonzero(valid)
@@ -704,30 +609,20 @@ class _LabWindowStatistics:
 class RealtimeClusterProcessor:
     """Stateful mode extraction, calibration, and nullifier processing for packet streams."""
 
+    _pending: dict[str, FloatArray]
+
     def __init__(self, config: ClusterProcessingConfig | None = None) -> None:
         self.config = config or ClusterProcessingConfig()
         self._sample_rate_hz: float | None = None
         self._mode = np.empty(0, dtype=np.float64)
-        self._pending_a = np.empty(0, dtype=np.float64)
-        self._pending_b = np.empty(0, dtype=np.float64)
-        self._delay_remaining = abs(self.config.channel_b_delay_samples)
-        self._current_window_id: int | None = None
-        self._window_gate: AcquisitionWindowGate | None = None
-        self._mode_index = 0
-        self._quadrature_history: dict[str, FloatArray] = {
-            "a": np.empty(0, dtype=np.float64),
-            "b": np.empty(0, dtype=np.float64),
-        }
-        self._history_window_ids = np.empty(0, dtype=np.int64)
         self._moments = {"a": _RunningMoments(), "b": _RunningMoments()}
         self._shot_noise_coefficients: dict[str, float] = {}
         self._calibrating = False
         self._rejected_modes = 0
-        self._ensemble = self._new_ensemble()
-        self._lab_statistics = _LabWindowStatistics(self.config)
         self._calibration_window = {name: _RunningMoments() for name in ("a", "b")}
         self._calibration_segment_variances: dict[str, list[float]] = {"a": [], "b": []}
         self._calibration_segment_counts: dict[str, int] = {"a": 0, "b": 0}
+        self.reset_stream()
 
     @property
     def calibrated(self) -> bool:
@@ -774,19 +669,15 @@ class RealtimeClusterProcessor:
         if preserve_acquisition:
             # Keep the bin phase, but exclude any mode spanning the change
             # between reference and signal. Copies avoid changing caller arrays.
-            self._pending_a = np.full(self._pending_a.shape, np.nan, dtype=np.float64)
-            self._pending_b = np.full(self._pending_b.shape, np.nan, dtype=np.float64)
+            self._pending = {name: np.full(values.shape, np.nan, dtype=np.float64)
+                             for name, values in self._pending.items()}
         else:
-            self._pending_a = np.empty(0, dtype=np.float64)
-            self._pending_b = np.empty(0, dtype=np.float64)
+            self._pending = _empty_quadratures()
             self._delay_remaining = abs(self.config.channel_b_delay_samples)
-            self._current_window_id = None
-            self._window_gate = None
+            self._current_window_id: int | None = None
+            self._window_gate: AcquisitionWindowGate | None = None
             self._mode_index = 0
-        self._quadrature_history = {
-            "a": np.empty(0, dtype=np.float64),
-            "b": np.empty(0, dtype=np.float64),
-        }
+        self._quadrature_history = _empty_quadratures()
         self._history_window_ids = np.empty(0, dtype=np.int64)
         self._ensemble = self._new_ensemble()
         self._lab_statistics = _LabWindowStatistics(self.config)
@@ -806,25 +697,21 @@ class RealtimeClusterProcessor:
             self._commit_calibration_window()
         if self.config.variance_estimator == "lab_rolling" and self._sample_rate_hz:
             self._lab_statistics.close(self._mode.size / self._sample_rate_hz, self.calibrated)
-        self._pending_a = np.empty(0, dtype=np.float64)
-        self._pending_b = np.empty(0, dtype=np.float64)
+        self._pending = _empty_quadratures()
         self._delay_remaining = abs(self.config.channel_b_delay_samples)
         self._current_window_id = None
 
     def start_calibration(self) -> None:
-        for moments in self._moments.values():
-            moments.clear()
+        self.clear_calibration()
         self._calibrating = True
-        self._calibration_segment_variances = {"a": [], "b": []}
-        self._calibration_segment_counts = {"a": 0, "b": 0}
-        self._shot_noise_coefficients.clear()
-        self.reset_stream(preserve_acquisition=True)
 
-    def finish_calibration(self, *, minimum_modes: int = 100) -> Mapping[str, float]:
+    def finish_calibration(
+        self, *, minimum_modes: int = 100, required_sources: set[str] | None = None,
+    ) -> Mapping[str, float]:
         if _segment_calibration(self.config):
             self._commit_calibration_window()
         coefficients: dict[str, float] = {}
-        required = (
+        required = required_sources if required_sources is not None else (
             {term.source for spec in processing_nullifiers(self.config) for term in spec.terms}
             if self.config.analysis_mode == "single" else {"a", "b"}
         )
@@ -874,8 +761,6 @@ class RealtimeClusterProcessor:
         width = (float(np.nextafter(self.config.mode_samples / sample_rate_hz, np.inf))
                  if self.config.mode_samples is not None else self.config.mode_width_seconds)
         if self.config.explicit_mode_template:
-            if sample_rate_hz <= 0:
-                raise ValueError("sample_rate_hz must be positive")
             raw = np.asarray(self.config.explicit_mode_template, dtype=np.float64)
             if raw.size < self.config.min_samples_per_mode:
                 raise ValueError(
@@ -884,28 +769,22 @@ class RealtimeClusterProcessor:
                 )
             mode = normalize_mode(raw, 1 / sample_rate_hz)
         elif self.config.mode_shape == "identity":
-            assert self.config.mode_samples is not None
-            mode = normalize_mode(np.ones(self.config.mode_samples, dtype=np.float64),
+            points = self.config.mode_samples or mode_sample_count(
+                width, sample_rate_hz, self.config.mode_shape
+            )
+            if points < self.config.min_samples_per_mode:
+                raise ValueError(f"temporal mode has only {points} samples; at least "
+                                 f"{self.config.min_samples_per_mode} are required")
+            mode = normalize_mode(np.ones(points, dtype=np.float64),
                                   1 / sample_rate_hz)
-        elif self.config.mode_shape == "lab_gaussian_linear_cosine":
-            mode = build_lab_mode_template(
-                width, self.config.measurement_frequency_hz,
-                1 / sample_rate_hz, oversample=self.config.mode_oversample,
-                min_samples_per_mode=self.config.min_samples_per_mode,
-            )
-        elif self.config.mode_shape == "gaussian_linear":
-            mode = build_gauss_lin_mode_template(
-                width,
-                self.config.measurement_frequency_hz,
-                1 / sample_rate_hz,
-                oversample=self.config.mode_oversample,
-                min_samples_per_mode=self.config.min_samples_per_mode,
-            )
         else:
-            mode = build_mode_template(
-                width,
-                self.config.measurement_frequency_hz,
-                1 / sample_rate_hz,
+            builder = {
+                "lab_gaussian_linear_cosine": build_lab_mode_template,
+                "gaussian_linear": build_gauss_lin_mode_template,
+                "gaussian_linear_cosine": build_mode_template,
+            }[self.config.mode_shape]
+            mode = builder(
+                width, self.config.measurement_frequency_hz, 1 / sample_rate_hz,
                 oversample=self.config.mode_oversample,
                 min_samples_per_mode=self.config.min_samples_per_mode,
             )
@@ -935,12 +814,8 @@ class RealtimeClusterProcessor:
         return self._window_gate
 
     def feed(
-        self,
-        channel_a: npt.NDArray[np.number],
-        channel_b: npt.NDArray[np.number],
-        sample_rate_hz: float,
-        *,
-        discontinuity: bool = False,
+        self, channel_a: npt.NDArray[np.number], channel_b: npt.NDArray[np.number],
+        sample_rate_hz: float, *, discontinuity: bool = False,
     ) -> ClusterProcessingResult | None:
         if discontinuity:
             self.reset_stream()
@@ -956,10 +831,9 @@ class RealtimeClusterProcessor:
             if self._current_window_id != span.window_id:
                 self._close_window()
                 self._current_window_id = span.window_id
-            extracted = self._extract_quadratures(a[span.start:span.stop],
-                                                  b[span.start:span.stop], sample_rate_hz)
-            if extracted is not None:
-                raw, _, _ = extracted
+            raw = self._extract_quadratures(a[span.start:span.stop],
+                                            b[span.start:span.stop], sample_rate_hz)
+            if raw is not None:
                 extracted_a.append(raw["a"])
                 extracted_b.append(raw["b"])
                 if self._calibrating:
@@ -975,7 +849,9 @@ class RealtimeClusterProcessor:
         raw_quadratures = {"a": np.concatenate(extracted_a), "b": np.concatenate(extracted_b)}
         period = self._mode.size / sample_rate_hz
         if self._calibrating:
-            return self._calibration_result(raw_quadratures, result_start, period)
+            status = ("calibrating shot noise: "
+                      f"A={self._moments['a'].count}, B={self._moments['b'].count} modes")
+            return self._result(raw_quadratures, result_start, period, status)
         return self._live_result(raw_quadratures, period)
 
     def _append_history(self, raw_quadratures: dict[str, FloatArray], window_id: int) -> None:
@@ -995,85 +871,61 @@ class RealtimeClusterProcessor:
             self._lab_statistics.append(normalized)
 
     def _extract_quadratures(
-        self,
-        channel_a: npt.NDArray[np.number],
-        channel_b: npt.NDArray[np.number],
+        self, channel_a: npt.NDArray[np.number], channel_b: npt.NDArray[np.number],
         sample_rate_hz: float,
-    ) -> tuple[dict[str, FloatArray], int, float] | None:
+    ) -> dict[str, FloatArray] | None:
         """Buffer complete temporal modes and return their two quadratures."""
-        a = np.asarray(channel_a, dtype=np.float64).reshape(-1)
-        b = np.asarray(channel_b, dtype=np.float64).reshape(-1)
+        channels = {name: np.asarray(values, dtype=np.float64).reshape(-1)
+                    for name, values in (("a", channel_a), ("b", channel_b))}
         if self._delay_remaining:
-            delay = self.config.channel_b_delay_samples
-            if delay > 0:
-                skipped = min(self._delay_remaining, b.size)
-                b = b[skipped:]
-            elif delay < 0:
-                skipped = min(self._delay_remaining, a.size)
-                a = a[skipped:]
+            name = "b" if self.config.channel_b_delay_samples > 0 else "a"
+            skipped = min(self._delay_remaining, channels[name].size)
+            channels[name] = channels[name][skipped:]
             self._delay_remaining -= skipped
-        if a.size:
-            self._pending_a = (
-                a if self._pending_a.size == 0 else np.concatenate((self._pending_a, a))
-            )
-        if b.size:
-            self._pending_b = (
-                b if self._pending_b.size == 0 else np.concatenate((self._pending_b, b))
-            )
-
-        available = min(self._pending_a.size, self._pending_b.size)
-        mode_count = available // self._mode.size
+        for name, values in channels.items():
+            if values.size:
+                pending = self._pending[name]
+                self._pending[name] = np.concatenate((pending, values)) if pending.size else values
+        mode_count = min(values.size for values in self._pending.values()) // self._mode.size
         if mode_count == 0:
             return None
         usable = mode_count * self._mode.size
-        mode_a = self._pending_a[:usable].reshape(mode_count, self._mode.size)
-        mode_b = self._pending_b[:usable].reshape(mode_count, self._mode.size)
-        dt_seconds = 1 / sample_rate_hz
-        quadrature_a = np.asarray(mode_a @ self._mode * dt_seconds, dtype=np.float64)
-        quadrature_b = np.asarray(mode_b @ self._mode * dt_seconds, dtype=np.float64)
-
+        modes = {name: values[:usable].reshape(mode_count, self._mode.size)
+                 for name, values in self._pending.items()}
+        quadratures = {name: values @ self._mode * (1 / sample_rate_hz)
+                       for name, values in modes.items()}
         threshold = self.config.gate_absolute_threshold
-        if threshold is None:
-            valid: npt.NDArray[np.bool_] | None = None
-            rejected = 0
-        else:
-            valid = np.all(np.isfinite(mode_a), axis=1) & np.all(np.isfinite(mode_b), axis=1)
-            valid &= np.max(np.abs(mode_a), axis=1) < threshold
-            valid &= np.max(np.abs(mode_b), axis=1) < threshold
-            rejected = int(np.count_nonzero(~valid))
-        self._rejected_modes += rejected
-        if valid is not None:
-            quadrature_a[~valid] = np.nan
-            quadrature_b[~valid] = np.nan
-        self._pending_a = self._pending_a[usable:]
-        self._pending_b = self._pending_b[usable:]
-        result_start = self._mode_index
+        if threshold is not None:
+            valid = np.ones(mode_count, dtype=np.bool_)
+            for samples in modes.values():
+                valid &= np.all(np.isfinite(samples), axis=1)
+                valid &= np.max(np.abs(samples), axis=1) < threshold
+            self._rejected_modes += int(np.count_nonzero(~valid))
+            for values in quadratures.values():
+                values[~valid] = np.nan
+        self._pending = {name: values[usable:] for name, values in self._pending.items()}
         self._mode_index += mode_count
-        return {"a": quadrature_a, "b": quadrature_b}, result_start, dt_seconds
+        return quadratures
 
-    def _calibration_result(
-        self, raw_quadratures: dict[str, FloatArray], result_start: int, period: float
+    def _result(
+        self, quadratures: dict[str, FloatArray], start: int, period: float,
+        status: str, **values: Any,
     ) -> ClusterProcessingResult:
+        values = {"nullifiers": {}, "variances": {}, "squeezing_db": {}, **values}
         return ClusterProcessingResult(
-            mode_period_seconds=period,
-            mode_index_start=result_start,
-            quadratures=raw_quadratures,
-            nullifiers={},
-            variances={},
-            squeezing_db={},
-            shot_noise_coefficients={},
-            calibrated=False,
-            calibrating=True,
-            rejected_modes=self._rejected_modes,
-            status=(
-                "calibrating shot noise: "
-                f"A={self._moments['a'].count}, B={self._moments['b'].count} modes"
-            ),
+            mode_period_seconds=period, mode_index_start=start, quadratures=quadratures,
+            shot_noise_coefficients=dict(self._shot_noise_coefficients),
+            calibrated=self.calibrated, calibrating=self.calibrating,
+            rejected_modes=self._rejected_modes, status=status,
             variance_estimator=self.config.variance_estimator,
             analysis_mode=self.config.analysis_mode,
             mode_samples=self._mode.size,
             variance_window_modes=_variance_points(self.config, period),
-            **self._acquisition_metadata(),
+            measurement_basis=self.config.measurement_basis,
+            acquisition_state=self.acquisition_state,
+            collection_windows=self._window_gate.collection_windows if self._window_gate else 0,
+            accepted_samples=self.accepted_samples, skipped_samples=self.skipped_samples,
+            **values,
         )
 
     def _live_result(
@@ -1088,6 +940,11 @@ class RealtimeClusterProcessor:
         squeezing: dict[str, FloatArray] = {}
         variance_counts: dict[str, npt.NDArray[np.int64]] = {}
         lab_rolling = self.config.variance_estimator == "lab_rolling"
+        # Ensemble moments and completed lab windows already provide variance.
+        # Only calculate a rolling trace when it is used in the returned result.
+        use_rolling = self.config.variance_estimator != "ensemble" and not (
+            lab_rolling and self._lab_statistics.completed
+        )
         variance_points = _variance_points(self.config, period)
         boundaries = np.concatenate((
             [0], np.flatnonzero(np.diff(self._history_window_ids)) + 1,
@@ -1107,12 +964,16 @@ class RealtimeClusterProcessor:
                     )
                     if chunks:
                         chunks.append(np.array([np.nan]))
-                        variance_chunks.append(np.array([np.nan]))
+                        if use_rolling:
+                            variance_chunks.append(np.array([np.nan]))
                     chunks.append(chunk)
-                    variance_chunks.append(
-                        rolling_variance(chunk, variance_points, lab_window=lab_rolling,
-                                         require_full_window=self.config.analysis_mode == "single")
-                    )
+                    if use_rolling:
+                        variance_chunks.append(
+                            rolling_variance(
+                                chunk, variance_points, lab_window=lab_rolling,
+                                require_full_window=self.config.analysis_mode == "single",
+                            )
+                        )
             nullifier = np.concatenate(chunks) if chunks else np.empty(0, dtype=np.float64)
             variance = (np.concatenate(variance_chunks) if variance_chunks
                         else np.empty(0, dtype=np.float64))
@@ -1150,83 +1011,32 @@ class RealtimeClusterProcessor:
             if self._lab_statistics.prefix_limited:
                 status += f"; first {self.config.history_modes} modes/window retained"
 
-        return ClusterProcessingResult(
-            mode_period_seconds=period,
-            mode_index_start=min(first_nullifier_indices, default=self._mode_index),
-            quadratures=normalized,
+        return self._result(
+            normalized, min(first_nullifier_indices, default=self._mode_index), period, status,
             nullifiers=nullifiers,
             variances=variances,
             squeezing_db=squeezing,
-            shot_noise_coefficients=dict(self._shot_noise_coefficients),
-            calibrated=self.calibrated,
-            calibrating=False,
-            rejected_modes=self._rejected_modes,
-            status=status,
-            variance_estimator=self.config.variance_estimator,
             variance_counts=variance_counts,
             variance_index_starts=(
                 {spec.name: spec.start for spec in processing_nullifiers(self.config)}
                 if self.config.variance_estimator in {"ensemble", "lab_rolling"} else {}
             ),
-            analysis_mode=self.config.analysis_mode,
-            mode_samples=self._mode.size,
-            variance_window_modes=variance_points,
-            **self._acquisition_metadata(),
         )
 
-    def _acquisition_metadata(self) -> _AcquisitionMetadata:
-        gate = self._window_gate
-        return {
-            "measurement_basis": self.config.measurement_basis,
-            "acquisition_state": self.acquisition_state,
-            "collection_windows": gate.collection_windows if gate is not None else 0,
-            "accepted_samples": self.accepted_samples,
-            "skipped_samples": self.skipped_samples,
-        }
+
+def _config_key(name: str) -> str:
+    first, *rest = name.split("_")
+    return first + "".join(part.title() for part in rest)
 
 
 def config_to_dict(config: ClusterProcessingConfig) -> dict[str, object]:
-    return {
-        "modeWidthSeconds": config.mode_width_seconds,
-        "measurementFrequencyHz": config.measurement_frequency_hz,
-        "modeShape": config.mode_shape,
-        "analysisMode": config.analysis_mode,
-        "singleChannel": config.single_channel,
-        "modeSamples": config.mode_samples,
-        "varianceWindowModes": config.variance_window_modes,
-        "calibrationEstimator": config.calibration_estimator,
-        "measurementBasis": config.measurement_basis,
-        "varianceWindowSeconds": config.variance_window_seconds,
-        "varianceEstimator": config.variance_estimator,
-        "minSamplesPerMode": config.min_samples_per_mode,
-        "modeOversample": config.mode_oversample,
-        "channelBDelaySamples": config.channel_b_delay_samples,
-        "gateAbsoluteThreshold": config.gate_absolute_threshold,
-        "explicitModeTemplate": list(config.explicit_mode_template),
-        "historyModes": config.history_modes,
-        "windowMode": config.window_mode,
-        "lockSeconds": config.lock_seconds,
-        "collectSeconds": config.collect_seconds,
-        "collectionGuardSeconds": config.collection_guard_seconds,
-        "collectionEndGuardSamples": config.collection_end_guard_samples,
-        "triggerChannel": config.trigger_channel,
-        "triggerEdge": config.trigger_edge,
-        "triggerLevelVolts": config.trigger_level_volts,
-        "triggerDelaySeconds": config.trigger_delay_seconds,
-        "triggerHoldoffSeconds": config.trigger_holdoff_seconds,
-        "triggerHysteresisVolts": config.trigger_hysteresis_volts,
-        "nullifiers": [
-            {
-                "name": spec.name,
-                "start": spec.start,
-                "terms": [
-                    {"source": term.source, "offset": term.offset, "weight": term.weight}
-                    for term in spec.terms
-                ],
-            }
-            for spec in config.nullifiers
-        ],
-    }
+    result = {_config_key(item.name): getattr(config, item.name) for item in fields(config)}
+    result["explicitModeTemplate"] = list(config.explicit_mode_template)
+    result["nullifiers"] = [
+        {"name": spec.name, "start": spec.start, "terms": [asdict(term) for term in spec.terms]}
+        for spec in config.nullifiers
+    ]
+    return result
 
 
 def config_from_dict(data: Mapping[str, object]) -> ClusterProcessingConfig:
@@ -1249,60 +1059,32 @@ def config_from_dict(data: Mapping[str, object]) -> ClusterProcessingConfig:
                 raise ValueError("each nullifier term requires a string source")
             terms = tuple(
                 NullifierTerm(
-                    source=term["source"],
-                    offset=_as_int(term.get("offset", 0)),
-                    weight=_as_float(term.get("weight", 1.0)),
+                    term["source"], _as_int(term.get("offset", 0)),
+                    _as_float(term.get("weight", 1.0)),
                 )
                 for term in raw_terms
             )
-            specs.append(
-                NullifierSpec(
-                    name=raw_spec["name"],
-                    terms=terms,
-                    start=_as_int(raw_spec.get("start", 0)),
-                )
-            )
+            specs.append(NullifierSpec(raw_spec["name"], terms, _as_int(raw_spec.get("start", 0))))
     explicit = data.get("explicitModeTemplate", [])
     if not isinstance(explicit, list):
         raise ValueError("explicitModeTemplate must be a list")
-    return ClusterProcessingConfig(
-        mode_width_seconds=_as_float(data.get("modeWidthSeconds", 247e-9)),
-        measurement_frequency_hz=_as_float(data.get("measurementFrequencyHz", 2.7e6)),
-        mode_shape=str(data.get("modeShape", "gaussian_linear")),
-        analysis_mode=str(data.get("analysisMode", "cluster")),
-        single_channel=str(data.get("singleChannel", "both")),
-        mode_samples=(None if data.get("modeSamples") in (None, "")
-                      else _as_int(data["modeSamples"])),
-        variance_window_modes=(None if data.get("varianceWindowModes") in (None, "")
-                               else _as_int(data["varianceWindowModes"])),
-        calibration_estimator=str(data.get("calibrationEstimator", "auto")),
-        measurement_basis=str(data.get("measurementBasis", "x")),
-        variance_window_seconds=_as_float(data.get("varianceWindowSeconds", 1 / 3_000)),
-        variance_estimator=str(data.get("varianceEstimator", "rolling")),
-        min_samples_per_mode=_as_int(data.get("minSamplesPerMode", 16)),
-        mode_oversample=_as_int(data.get("modeOversample", 32)),
-        channel_b_delay_samples=_as_int(data.get("channelBDelaySamples", 0)),
-        gate_absolute_threshold=(
-            None
-            if data.get("gateAbsoluteThreshold") in (None, "")
-            else _as_float(data["gateAbsoluteThreshold"])
-        ),
+    defaults = ClusterProcessingConfig()
+    values: dict[str, Any] = {}
+    converters: dict[type, Callable[[object], object]] = {float: _as_float, int: _as_int, str: str}
+    for item in fields(defaults):
+        key = _config_key(item.name)
+        if key not in data or item.name in {"nullifiers", "explicit_mode_template"}:
+            continue
+        value, default = data[key], getattr(defaults, item.name)
+        if default is None:
+            convert = _as_float if item.name == "gate_absolute_threshold" else _as_int
+            values[item.name] = None if value in (None, "") else convert(value)
+        else:
+            values[item.name] = converters[type(default)](value)
+    return replace(
+        defaults, **values,
         explicit_mode_template=tuple(_as_float(value) for value in explicit),
-        nullifiers=tuple(specs) if specs else (
-            DEFAULT_CLUSTER_P if data.get("measurementBasis") == "p" else DEFAULT_CLUSTER_X,
-        ),
-        history_modes=_as_int(data.get("historyModes", 5_000)),
-        window_mode=str(data.get("windowMode", "continuous")),
-        lock_seconds=_as_float(data.get("lockSeconds", 0.005)),
-        collect_seconds=_as_float(data.get("collectSeconds", 0.005)),
-        collection_guard_seconds=_as_float(data.get("collectionGuardSeconds", 0.0)),
-        collection_end_guard_samples=_as_int(data.get("collectionEndGuardSamples", 0)),
-        trigger_channel=str(data.get("triggerChannel", "a")),
-        trigger_edge=str(data.get("triggerEdge", "rising")),
-        trigger_level_volts=_as_float(data.get("triggerLevelVolts", 0.0)),
-        trigger_delay_seconds=_as_float(data.get("triggerDelaySeconds", 0.0)),
-        trigger_holdoff_seconds=_as_float(data.get("triggerHoldoffSeconds", 0.010)),
-        trigger_hysteresis_volts=_as_float(data.get("triggerHysteresisVolts", 0.0)),
+        nullifiers=tuple(specs) or defaults.nullifiers,
     )
 
 

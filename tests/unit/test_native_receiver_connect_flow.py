@@ -4,11 +4,23 @@ import asyncio
 import queue
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import websockets
 
+from apps.native_receiver import engine_controller
 from apps.native_receiver import native_receiver as nr
+from apps.native_receiver.api_client import ApiError
+from apps.native_receiver.constants import (
+    COLORS,
+    ENGINE_CONNECT_TIMEOUT_SECONDS,
+    REDPITAYA_CONNECT_TIMEOUT_SECONDS,
+    REDPITAYA_START_TIMEOUT_SECONDS,
+    UI_LOGGER,
+)
+from apps.native_receiver.protocol import Device
 
 
 class Value:
@@ -32,7 +44,7 @@ class FakeStatusDot:
 
 def app_for_connect(state: str) -> nr.ReceiverApp:
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
-    app.selected_device = nr.Device(
+    app.selected_device = Device(
         id="11111111-1111-1111-1111-111111111111",
         name="RP test",
         host="rp-test.local",
@@ -63,6 +75,29 @@ def test_streaming_board_connect_attaches_socket_without_backend_lifecycle() -> 
         "socket:11111111-1111-1111-1111-111111111111",
     ]
     assert app.status.get() == "attaching sample socket"
+
+
+def test_faulted_board_can_retry_while_its_display_socket_is_still_connected() -> None:
+    app = app_for_connect("faulted")
+    app.socket_thread = SimpleNamespace(is_alive=lambda: True)  # type: ignore[assignment]
+    calls: list[str] = []
+    app._open_device_tab = lambda _id: calls.append("tab")  # type: ignore[method-assign]
+    app._start_socket = lambda _id: calls.append("new socket")  # type: ignore[method-assign]
+    app._run_busy = lambda label, *_args: calls.append(label)  # type: ignore[method-assign]
+    app.connect_selected()
+    assert calls == ["tab", "Starting Red Pitaya acquisition"]
+
+
+def test_faulted_board_retry_button_remains_enabled_with_an_open_display_socket() -> None:
+    app = app_for_connect("faulted")
+    app.socket_thread = SimpleNamespace(is_alive=lambda: True)  # type: ignore[assignment]
+    app.loading_active = False
+    configured: dict[str, Any] = {}
+    app.connect_button = SimpleNamespace(  # type: ignore[assignment]
+        configure=lambda **kwargs: configured.update(kwargs)
+    )
+    app._update_connect_controls()
+    assert configured == {"text": "Retry connection", "state": "normal"}
 
 
 def test_stopped_board_connect_attaches_socket_before_starting_hardware() -> None:
@@ -113,17 +148,17 @@ def test_stopped_board_connect_attaches_socket_before_starting_hardware() -> Non
         (
             "GET",
             "/api/v1/devices/11111111-1111-1111-1111-111111111111/status",
-            nr.ENGINE_CONNECT_TIMEOUT_SECONDS,
+            ENGINE_CONNECT_TIMEOUT_SECONDS,
         ),
         (
             "POST",
             "/api/v1/devices/11111111-1111-1111-1111-111111111111/connect",
-            nr.REDPITAYA_CONNECT_TIMEOUT_SECONDS,
+            REDPITAYA_CONNECT_TIMEOUT_SECONDS,
         ),
         (
             "POST",
             "/api/v1/devices/11111111-1111-1111-1111-111111111111/start",
-            nr.REDPITAYA_START_TIMEOUT_SECONDS,
+            REDPITAYA_START_TIMEOUT_SECONDS,
         ),
     ]
 
@@ -137,15 +172,15 @@ def test_engine_indicator_distinguishes_ok_starting_and_failure() -> None:
 
     app._set_engine_status("ok")
     assert app.engine_status.get() == "OK"
-    assert app.engine_status_dot.configured[-1][1]["fill"] == nr.COLORS["ch1"]
+    assert app.engine_status_dot.configured[-1][1]["fill"] == COLORS["ch1"]
 
     app._set_engine_status("starting")
     assert app.engine_status.get() == "Starting"
-    assert app.engine_status_dot.configured[-1][1]["fill"] == nr.COLORS["warning"]
+    assert app.engine_status_dot.configured[-1][1]["fill"] == COLORS["warning"]
 
     app._set_engine_status("error")
     assert app.engine_status.get() == "Error"
-    assert app.engine_status_dot.configured[-1][1]["fill"] == nr.COLORS["danger"]
+    assert app.engine_status_dot.configured[-1][1]["fill"] == COLORS["danger"]
 
 
 @pytest.mark.parametrize(
@@ -254,14 +289,14 @@ def test_socket_loop_catches_connect_error_without_traceback_logging(
         raise ConnectionRefusedError("refused")
 
     warning_calls: list[str] = []
-    monkeypatch.setattr(nr.websockets, "connect", fail_connect)
+    monkeypatch.setattr(websockets, "connect", fail_connect)
     monkeypatch.setattr(
-        nr.UI_LOGGER,
+        UI_LOGGER,
         "warning",
         lambda message, *args, **_kwargs: warning_calls.append(message % args),
     )
     monkeypatch.setattr(
-        nr.UI_LOGGER,
+        UI_LOGGER,
         "exception",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("traceback logging should not be used for socket connection failures")
@@ -284,7 +319,7 @@ def test_redpitaya_connect_background_failure_shows_toast() -> None:
             "busy_error",
             (
                 "Starting Red Pitaya acquisition",
-                nr.ApiError("Timed out after 8s"),
+                ApiError("Timed out after 8s"),
                 8000,
             ),
         )
@@ -385,7 +420,9 @@ def test_stop_engine_terminates_owned_process_tree(monkeypatch: pytest.MonkeyPat
         callback(work())
 
     app._run_busy = run_busy  # type: ignore[method-assign]
-    monkeypatch.setattr(nr, "terminate_process_tree", lambda item: terminated.append(item))
+    monkeypatch.setattr(
+        engine_controller, "terminate_process_tree", lambda item: terminated.append(item)
+    )
 
     app.stop_engine()
 
@@ -403,7 +440,7 @@ def test_engine_command_prefers_named_project_launcher(
     launcher = tmp_path / ".venv" / "Scripts" / "quantum-light-engine.exe"
     launcher.parent.mkdir(parents=True)
     launcher.write_bytes(b"")
-    monkeypatch.setattr(nr, "WORKSPACE_ROOT", tmp_path)
+    monkeypatch.setattr(engine_controller, "WORKSPACE_ROOT", tmp_path)
 
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
 
@@ -471,7 +508,7 @@ def test_out1_test_button_toggles_the_selected_device(
     assert app.test_output_label.get() == "Stop OUT1"
     assert app.test_output_button.style == "Active.TButton"
 
-    app.selected_device = nr.Device(
+    app.selected_device = Device(
         id="22222222-2222-2222-2222-222222222222",
         name="Other RP",
         host="other-rp.local",

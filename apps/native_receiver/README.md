@@ -41,8 +41,61 @@ Receiver settings persist in `data/native_receiver_settings.json`; cluster confi
 
 The receiver supports selectable history windows, channel visibility and offsets, adaptive render
 pacing, FFT spectra and acquisition controls. The analysis area has **Spectrum analyzer** and
-**Nullifiers** tabs. The Nullifiers tab shows a configurable live 1D graph, collection controls and
-shot-noise calibration, with advanced temporal-template and formula settings.
+**Mode analysis** tabs. Mode analysis shows the latest channel or nullifier readings, the actual
+samples and duration per mode, reference calibration, and a live graph. Drag the divider between
+the two plots to adjust their relative sizes.
+
+**Setup…** opens calculation, temporal-width, variance-window and collection controls without covering
+the plots with permanent toolbars. **Full settings…** separates acquisition, temporal-mode parameters,
+templates/formulas and live preview into tabs; long forms scroll within their page. **Display
+controls…** contains waveform zoom, offsets, cursors and the display trigger. These display controls
+are independent of mode collection timing. **Diagnostics** shows transport counters and voltage
+ranges. The Engine, Red Pitayas and Signal menus retain the device and advanced actions.
+
+Enter **T width (µs)** to set the temporal bin. **Samples / mode** is a read-only calculation
+from that width and the selected ADC rate; the preview also shows the actual sampled duration.
+Changing the sampling rate keeps T width and updates the count. Applying settings rejects bins
+outside the configured minimum–4096 sample range. Legacy fixed-count settings are shown as their
+equivalent width at the selected rate. The lab shape truncates the count, following the script;
+the other shapes round to the nearest sample. The sampled duration can therefore differ from T width.
+
+For a 308 ns mode, enter **0.308** and choose **Use 125 MS/s buffered captures** in
+Setup. This reconnects the selected board at decimation 1 and processes independent
+625,024-sample captures on its C processor. Only a 1,024-sample raw waveform preview
+and compact calculated results reach the PC. The UI labels the gaps between captures;
+its waveform history does not join separate captures. At this rate a requested 308 ns
+width gives 38 samples and an actual 304 ns bin. Disconnect restores the previous
+FPGA image; reconnect resumes the selected buffered mode. To return to raw continuous
+streaming, disconnect, select a suitable sidebar decimation and apply its settings.
+
+The optimized buffered reader removes the extra capture pause and reuses completed
+board results for display. The validated 625,024-sample configuration reached about
+7.3 new frames/s on the test board. It preserves full capture processing and checks
+the optimized voltage conversion against the SDK. See the
+[capture performance measurements](../../docs/capture-performance-2026-10-29.md).
+
+When the engine has the native Red Pitaya backend enabled, the same controls send commands to
+the board's C processor. Its continuous ADC relay preserves the raw waveform stream; the receiver
+displays derived results without recalculating them in Python. Periodic and continuous collection
+modes are supported on the board. The chart status reports analysis overruns and FPGA loss.
+See the [native processor guide](../../native/redpitaya_nullifiers/README.md) for installation
+and engine settings. Restart the engine after changing these settings.
+
+The waveform and analysis area are displayed together. Reference controls remain above the analysis
+chart; the larger readings show the latest finite plotted estimates, with units matching the selected
+quantity. Reference calibration and calculations are unchanged by the layout.
+
+**Stop streaming**, beside Connect, stops acquisition on the selected Red Pitaya
+and keeps the last waveform and analysis visible. The acquisition status changes
+to **Stopped**, and **Start streaming** restarts measurements. Buffered captures
+keep the completed reference and output settings across Stop/Start. An active reference
+recording is cancelled when stopped. Disconnect remains available separately.
+
+**Record** collects a shot-noise reference for **10 seconds**, then finishes automatically.
+The progress bar on the right shows the time remaining and changes to **Reference ready**
+on success. The full settings editor shares the same countdown. **Finish** stops early;
+**Clear**, changing calculation settings, or disconnecting cancels the countdown. An
+unsuccessful reference reports an error instead of marking the calibration complete.
 
 New receiver configurations default to the supplied **lab postprocessing method**: 308 ns,
 6e6 frequency parameter, Gaussian-linear-cosine weighting, lab X/P signs, per-segment vacuum
@@ -80,17 +133,22 @@ when those samples lie outside the allowed edge positions within the display win
 
 ## Code organization
 
-`native_receiver.py` is the application shell and compatibility import surface. Its `ReceiverApp`
-assembles small, responsibility-specific mixins rather than owning the full implementation:
+`native_receiver.py` owns application initialization and shutdown; `entrypoint.py` owns command-line
+startup. Import utilities and models from their owning modules:
 
-- `*_ui.py`, `layout.py`, and `theme.py` construct and arrange reusable Tk views.
-- `engine_controller.py`, `device_controller.py`, and `stream_controller.py` own lifecycle actions.
-- `frame_processor.py`, `signal_view.py`, and the renderer modules transform and display samples.
-- `api_client.py`, `device_repository.py`, and `helpers.py` isolate external I/O and pure utilities.
-- `state.py`, `constants.py`, and `dialogs.py` keep initialization, presentation data, and modals
-  independent; `entrypoint.py` owns command-line startup.
+- `api_client.py` provides the UI-independent `EngineClient` for requests, health checks, device
+  decoding, and sample-stream URLs.
+- `engine_controller.py` handles engine launch and status; `device_controller.py` handles device
+  actions and selection; `acquisition_controls.py` handles acquisition settings and outputs.
+- `stream_controller.py` receives and processes frames; `signal_view.py` owns waveform selection,
+  zoom, pause, and trigger controls; `waveform_renderer.py` draws waveforms.
+- `layout.py` builds the menu, sidebar, and workspace. `waveform_ui.py` builds waveform controls,
+  `spectrum_ui.py` builds and draws spectra, and `notifications.py` owns loading and error feedback.
+- `theme.py`, `constants.py`, `protocol.py`, and `helpers.py` provide styles, presentation values,
+  sample history and decoding, and shared utilities.
 
-Receiver source files are kept below 400 physical lines; a unit test protects this boundary.
+Related behavior stays together without a fixed file-size limit. Acquisition isolation, bounded queues,
+loss tracking, and the engine's external interfaces remain part of the acquisition service.
 
 ## Troubleshooting and validation
 

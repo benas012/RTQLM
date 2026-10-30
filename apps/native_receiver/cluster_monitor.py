@@ -8,6 +8,8 @@ from dataclasses import replace
 from tkinter import messagebox, ttk
 from typing import Any
 
+from apps.native_receiver.calibration_ui import CalibrationProgress
+from apps.native_receiver.helpers import set_if_changed
 from apps.native_receiver.nullifier_acquisition import (
     AcquisitionWindowControls,
     AnalysisControls,
@@ -48,14 +50,14 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
             },
         )
         self.title("Mode squeezing and nullifiers")
-        self.geometry("1080x920")
-        self.minsize(960, 740)
+        self.geometry("960x760")
+        self.minsize(840, 650)
         self.configure(bg=self.palette["bg"])
         self.transient(parent)
         self.protocol("WM_DELETE_WINDOW", self._close)
         self.bind("<Escape>", lambda _event: self._close())
         self.bind("<Control-Return>", lambda _event: self._apply())
-        self.status = tk.StringVar(value="Waiting for two-channel samples")
+        self.status = tk.StringVar(value="Waiting for samples")
         self.readout = tk.StringVar(value="Shot-noise calibration required")
         self.plot_choice = tk.StringVar(value="Auto")
         self._refresh_after_id: str | None = None
@@ -76,7 +78,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
 
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(4, weight=1)
+        self.rowconfigure(1, weight=1)
 
         header = ttk.Frame(self, padding=(16, 14, 16, 8), style="Panel.TFrame")
         header.grid(row=0, column=0, sticky="ew")
@@ -88,14 +90,29 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
             text="Single-mode measures each channel separately. Cluster formulas use the "
             "selected homodyne x / p basis.",
             style="Muted.TLabel",
+            wraplength=850,
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
 
-        controls = ttk.LabelFrame(self, text="Temporal mode and variance", padding=10)
-        controls.grid(row=2, column=0, sticky="ew", padx=16, pady=(4, 8))
-        for column in range(8):
-            controls.columnconfigure(column, weight=1 if column % 2 else 0)
+        self.settings_notebook = ttk.Notebook(self, style="Analysis.TNotebook")
+        self.settings_notebook.grid(row=1, column=0, sticky="nsew", padx=16, pady=(8, 12))
+        setup_tab = ttk.Frame(self.settings_notebook, padding=14, style="Surface.TFrame")
+        mode_tab = ttk.Frame(self.settings_notebook, padding=14, style="Surface.TFrame")
+        formula_tab = ttk.Frame(self.settings_notebook, padding=10, style="Surface.TFrame")
+        preview_tab = ttk.Frame(self.settings_notebook, padding=8, style="Surface.TFrame")
+        for tab, title in ((setup_tab, "Acquisition"), (mode_tab, "Temporal mode"),
+                           (formula_tab, "Templates & formulas"), (preview_tab, "Live preview")):
+            tab.columnconfigure(0, weight=1)
+            tab.rowconfigure(0, weight=1)
+            self.settings_notebook.add(tab, text=title)
+        setup_tab = self._scrollable_body(setup_tab)
+        mode_tab = self._scrollable_body(mode_tab)
+        formula_tab.rowconfigure(0, weight=1)
+        preview_tab.rowconfigure(0, weight=1)
+        controls = ttk.LabelFrame(mode_tab, text="Temporal mode and variance", padding=14)
+        controls.grid(row=0, column=0, sticky="ew")
+        for column in range(3):
+            controls.columnconfigure(column, weight=1, uniform="mode_fields")
 
-        self.mode_width_us = tk.StringVar()
         self.frequency_mhz = tk.StringVar()
         self.variance_window_us = tk.StringVar()
         self.delay_samples = tk.StringVar()
@@ -106,7 +123,6 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         self.mode_oversample = tk.StringVar()
         self.variance_estimator = tk.StringVar()
         fields = (
-            ("Mode width (µs)", self.mode_width_us),
             ("Mode bandwidth (MHz)", self.frequency_mhz),
             ("Variance window (µs)", self.variance_window_us),
             ("B delay (samples)", self.delay_samples),
@@ -116,13 +132,13 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
             ("Template oversample", self.mode_oversample),
         )
         for index, (label, variable) in enumerate(fields):
-            row, pair = divmod(index, 3)
-            column = pair * 2
-            ttk.Label(controls, text=label).grid(row=row, column=column, sticky="w", padx=(0, 5))
+            row, column = divmod(index, 3)
+            ttk.Label(controls, text=label).grid(row=row * 2, column=column, sticky="w",
+                                                padx=(0, 12), pady=(0, 5))
             ttk.Entry(controls, textvariable=variable, width=14).grid(
-                row=row, column=column + 1, sticky="ew", padx=(0, 14), pady=3
+                row=row * 2 + 1, column=column, sticky="ew", padx=(0, 12), pady=(0, 12)
             )
-        ttk.Label(controls, text="Analytic shape").grid(row=3, column=0, sticky="w")
+        ttk.Label(controls, text="Analytic shape").grid(row=6, column=0, sticky="w")
         ttk.Combobox(
             controls,
             textvariable=self.mode_shape,
@@ -132,35 +148,42 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
             ),
             state="readonly",
             width=24,
-        ).grid(row=3, column=1, columnspan=2, sticky="w", pady=3)
+        ).grid(row=7, column=0, columnspan=2, sticky="ew", padx=(0, 12), pady=(5, 12))
         ttk.Label(
             controls,
             text="Amplitude rejection may bias variance; use timing for lock exclusion.",
-        ).grid(row=3, column=3, columnspan=4, sticky="w", padx=(8, 0))
-        ttk.Label(controls, text="Variance estimator").grid(row=4, column=0, sticky="w")
+            wraplength=760, style="Muted.TLabel",
+        ).grid(row=10, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        ttk.Label(controls, text="Variance estimator").grid(row=8, column=0, sticky="w")
         ttk.Combobox(
             controls,
             textvariable=self.variance_estimator,
             values=("ensemble", "rolling", "lab_rolling"),
             state="readonly",
             width=24,
-        ).grid(row=4, column=1, columnspan=2, sticky="w", pady=3)
+        ).grid(row=9, column=0, columnspan=2, sticky="ew", padx=(0, 12), pady=(5, 0))
         ttk.Label(
             controls,
             text="Ensemble: repeat aligned windows. Rolling: variance across modes.",
-        ).grid(row=4, column=3, columnspan=4, sticky="w", padx=(8, 0))
+            wraplength=760, style="Muted.TLabel",
+        ).grid(row=11, column=0, columnspan=3, sticky="w", pady=(5, 0))
 
-        acquisition_frame = ttk.LabelFrame(self, text="Nullifier acquisition window", padding=8)
-        acquisition_frame.grid(row=1, column=0, sticky="ew", padx=16, pady=(4, 4))
+        acquisition_frame = ttk.Frame(setup_tab, style="Toolbar.TFrame", padding=14)
+        acquisition_frame.grid(row=0, column=0, sticky="ew")
         self.acquisition = AcquisitionWindowControls(acquisition_frame)
         self.acquisition.pack(fill="x")
-        self.analysis = AnalysisControls(acquisition_frame)
+        self.analysis = AnalysisControls(acquisition_frame,
+                                         sample_rate_provider=self.parent.mode_sample_rate_hz)
+        self.mode_width_us = self.analysis.variables["mode_width_us"]
+        self.mode_shape.trace_add("write", lambda *_args:
+                                  self.analysis.set_mode_shape(self.mode_shape.get()))
         self.analysis.pack(fill="x", pady=(3, 0))
         ttk.Label(
             acquisition_frame,
             text="Periodic starts with locking. Triggered uses sampled CH1 / CH2, "
             "independently of the waveform display trigger.",
-        ).pack(anchor="w", pady=(4, 0))
+            wraplength=760,
+        ).pack(anchor="w", pady=(8, 0))
         presets = ttk.Frame(acquisition_frame, style="Toolbar.TFrame")
         presets.pack(anchor="w", pady=(4, 0))
         ttk.Button(
@@ -176,8 +199,8 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
             style="Compact.TButton",
         ).pack(side="left", padx=(8, 0))
 
-        editors = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        editors.grid(row=3, column=0, sticky="nsew", padx=16, pady=(0, 8))
+        editors = ttk.PanedWindow(formula_tab, orient=tk.HORIZONTAL)
+        editors.grid(row=0, column=0, sticky="nsew")
         mode_frame = ttk.LabelFrame(editors, text="Explicit mode template (JSON; [] = analytic)")
         self.mode_text = tk.Text(
             mode_frame,
@@ -206,9 +229,9 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         editors.add(nullifier_frame, weight=2)
 
         chart_frame = ttk.LabelFrame(
-            self, text="Live nullifiers · ensemble per mode / rolling diagnostic", padding=6
+            preview_tab, text="Live nullifiers · ensemble per mode / rolling diagnostic", padding=6
         )
-        chart_frame.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 8))
+        chart_frame.grid(row=0, column=0, sticky="nsew")
         chart_frame.columnconfigure(0, weight=1)
         chart_frame.rowconfigure(0, weight=1)
         self.canvas = tk.Canvas(
@@ -220,32 +243,69 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         self.canvas.grid(row=0, column=0, sticky="nsew")
 
         footer = ttk.Frame(self, padding=(16, 4, 16, 14), style="Panel.TFrame")
-        footer.grid(row=5, column=0, sticky="ew")
+        footer.grid(row=2, column=0, sticky="ew")
         footer.columnconfigure(0, weight=1)
-        ttk.Label(footer, textvariable=self.status).grid(row=0, column=0, sticky="w")
-        ttk.Label(footer, textvariable=self.readout).grid(row=1, column=0, sticky="w")
+        ttk.Label(footer, textvariable=self.status, wraplength=600).grid(
+            row=0, column=0, columnspan=2, sticky="w"
+        )
+        ttk.Label(footer, textvariable=self.readout, wraplength=840).grid(
+            row=1, column=0, columnspan=4, sticky="w", pady=(4, 8)
+        )
         ttk.Combobox(
             footer, textvariable=self.plot_choice, values=PLOT_CHOICES, state="readonly", width=15
-        ).grid(row=2, column=0, sticky="w", pady=(4, 0))
+        ).grid(row=3, column=0, sticky="w", pady=(8, 0))
+        self._build_plot_controls(footer).grid(
+            row=3, column=1, columnspan=3, sticky="e", padx=(8, 0), pady=(8, 0)
+        )
         ttk.Button(
             footer, text="Apply configuration", style="Accent.TButton", command=self._apply
-        ).grid(row=0, column=1, rowspan=2, padx=(8, 0))
+        ).grid(row=0, column=3, sticky="e", padx=(8, 0))
         ttk.Button(
             footer,
             text="Start shot-noise calibration",
             command=self._start_calibration,
-        ).grid(row=0, column=2, rowspan=2, padx=(8, 0))
+        ).grid(row=2, column=0, sticky="w")
         ttk.Button(footer, text="Finish calibration", command=self._finish_calibration).grid(
-            row=0, column=3, rowspan=2, padx=(8, 0)
+            row=2, column=1, sticky="w", padx=(8, 0)
         )
         ttk.Button(
             footer,
             text="Clear calibration",
             style="Danger.TButton",
             command=self._clear_calibration,
-        ).grid(row=0, column=4, rowspan=2, padx=(8, 0))
+        ).grid(row=2, column=2, sticky="w", padx=(8, 0))
+        self.calibration_progress_view = CalibrationProgress(footer, self.parent, length=150)
+        self.calibration_progress_view.grid(row=2, column=3, sticky="e", padx=(12, 0))
+
+    def _scrollable_body(self, tab: Any) -> Any:
+        canvas = tk.Canvas(tab, bg=self.palette["surface"], highlightthickness=0,
+                           width=1, height=1)
+        scrollbar = ttk.Scrollbar(tab, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set, yscrollincrement=24)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns", padx=(8, 0))
+        body = ttk.Frame(canvas, style="Surface.TFrame")
+        body.columnconfigure(0, weight=1)
+        item = canvas.create_window(0, 0, anchor="nw", window=body)
+        body.bind("<Configure>", lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(item, width=event.width))
+
+        def wheel(event: Any) -> str | None:
+            widget = event.widget
+            while widget is not None and widget not in (body, canvas):
+                widget = getattr(widget, "master", None)
+            if widget is None or not canvas.winfo_ismapped():
+                return None
+            if body.winfo_height() > canvas.winfo_height():
+                canvas.yview_scroll(-int(event.delta / 120), "units")
+                return "break"
+            return None
+
+        self.bind("<MouseWheel>", wheel, add="+")
+        return body
 
     def _load(self, config: ClusterProcessingConfig) -> None:
+        self._clear_plot_view()
         data = config_to_dict(config)
         self.mode_width_us.set(f"{config.mode_width_seconds * 1e6:g}")
         self.frequency_mhz.set(f"{config.measurement_frequency_hz / 1e6:g}")
@@ -271,7 +331,6 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         data = config_to_dict(self.parent.cluster_processor.config)
         data.update(
             {
-                "modeWidthSeconds": float(self.mode_width_us.get()) * 1e-6,
                 "measurementFrequencyHz": float(self.frequency_mhz.get()) * 1e6,
                 "varianceWindowSeconds": float(self.variance_window_us.get()) * 1e-6,
                 "channelBDelaySamples": int(self.delay_samples.get()),
@@ -303,6 +362,13 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
             )
             self._load(replace(
                 single,
+                mode_width_seconds=current.mode_width_seconds,
+                mode_samples=None,
+                mode_shape=current.mode_shape,
+                min_samples_per_mode=current.min_samples_per_mode,
+                measurement_frequency_hz=current.measurement_frequency_hz,
+                explicit_mode_template=current.explicit_mode_template,
+                channel_b_delay_samples=current.channel_b_delay_samples,
                 measurement_basis=current.measurement_basis,
                 single_channel=current.single_channel,
                 window_mode=current.window_mode,
@@ -358,13 +424,15 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
             return
         result, error = self.parent.cluster_snapshot()
         if error:
-            self.status.set(error)
-            self.readout.set("Use two channels and a sample rate adequate for the configured mode")
+            set_if_changed(self.status, error)
+            self._set_readout("Check the selected channels and temporal-mode sample rate")
             self._draw_message(error)
         elif result is None:
-            self._draw_message("Waiting for processed modes")
+            recording = self.parent.__dict__.get("_calibration_started") is not None
+            self._draw_message("Recording shot noise · finishes automatically after 10 s"
+                               if recording else "Waiting for processed modes")
         else:
-            self.status.set(result.status)
+            set_if_changed(self.status, result.status)
             self._draw_result(result)
         self._refresh_after_id = self.parent.after(REFRESH_INTERVAL_MS, self._refresh)
 

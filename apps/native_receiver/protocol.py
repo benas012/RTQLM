@@ -31,6 +31,8 @@ class Device:
     channel_2_enabled: bool
     decimation: int
     block_size_bytes: int
+    acquisition_mode: str = "streaming"
+    capture_samples: int = 625_024
 
 
 @dataclass(frozen=True)

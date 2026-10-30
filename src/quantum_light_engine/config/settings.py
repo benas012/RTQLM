@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +26,11 @@ class EngineSettings(BaseSettings):
     auto_connect: bool = False
     auto_start: bool = False
     shutdown_timeout_seconds: float = Field(default=10.0, gt=0)
+    trigger_ssh_password: SecretStr | None = None
+    native_nullifier_enabled: bool = False
+    native_nullifier_executable: str = "/root/rtqlm-nullifiers/current/build/rp-nullifierd"
+    native_nullifier_port: int = Field(default=18902, ge=1024, le=65535)
+    native_nullifier_hosts: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_relationships(self) -> EngineSettings:

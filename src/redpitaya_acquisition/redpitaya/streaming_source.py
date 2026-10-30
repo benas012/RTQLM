@@ -19,6 +19,7 @@ from .app_manager import (
     request_streaming_app_start,
     request_streaming_app_stop,
 )
+from .binary_adc import BinaryADCClient
 from .callback import create_callback
 from .compatibility import StreamingCompatibility
 from .host import streaming_host
@@ -243,7 +244,11 @@ class RedPitayaStreamingSource(AcquisitionSource):
         config_client_type = getattr(module, "ConfigStreamClient", None)
         if config_client_type is not None:
             self._config_client = config_client_type()
-            self._client = module.ADCStreamClient(self._config_client)
+            self._client = (
+                BinaryADCClient(module, self._config_client, self._settings)
+                if self._settings.native_nullifier_port
+                else module.ADCStreamClient(self._config_client)
+            )
         else:
             self._config_client = None
             self._client = module.ADCStreamClient()

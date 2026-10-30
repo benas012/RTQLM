@@ -7,6 +7,14 @@ import numpy as np
 import pytest
 
 from apps.native_receiver import native_receiver as nr
+from apps.native_receiver.constants import (
+    DEFAULT_TIME_SPAN,
+    MAX_POINTS,
+    TRIGGER_PRE_SAMPLES_FRACTION,
+)
+from apps.native_receiver.helpers import adc_counts_to_volts, find_trigger_crossing
+from apps.native_receiver.protocol import SampleFrame, SampleHistory
+from apps.native_receiver.settings import SIGNAL_SCRIPT_FEATURE_ENV, signal_script_feature_enabled
 from quantum_light_engine.post_processing import (
     ClusterProcessingConfig,
     RealtimeClusterProcessor,
@@ -14,23 +22,23 @@ from quantum_light_engine.post_processing import (
 from tests.unit.test_native_receiver_connect_flow import Value
 
 
-def frame(sequence: int, start: int, count: int = 4) -> nr.SampleFrame:
+def frame(sequence: int, start: int, count: int = 4) -> SampleFrame:
     data = np.arange(start, start + count, dtype=np.int16)
-    return nr.SampleFrame(3, sequence, 1000.0, count, 0, 0, 0, memoryview(data), memoryview(-data))
+    return SampleFrame(3, sequence, 1000.0, count, 0, 0, 0, memoryview(data), memoryview(-data))
 
 
 def test_signal_script_feature_flag_accepts_enabled_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv(nr.SIGNAL_SCRIPT_FEATURE_ENV, raising=False)
-    assert not nr.signal_script_feature_enabled()
+    monkeypatch.delenv(SIGNAL_SCRIPT_FEATURE_ENV, raising=False)
+    assert not signal_script_feature_enabled()
     for value in ("1", "true", "yes", "on", "enabled"):
-        monkeypatch.setenv(nr.SIGNAL_SCRIPT_FEATURE_ENV, value)
-        assert nr.signal_script_feature_enabled()
+        monkeypatch.setenv(SIGNAL_SCRIPT_FEATURE_ENV, value)
+        assert signal_script_feature_enabled()
 
 
 def test_history_wraps_and_owns_snapshots() -> None:
-    history = nr.SampleHistory(capacity=10)
+    history = SampleHistory(capacity=10)
     for sequence in range(1, 4):
         history.append(frame(sequence, (sequence - 1) * 4))
     snapshot = history.snapshot(10)
@@ -48,7 +56,7 @@ def test_history_wraps_and_owns_snapshots() -> None:
 
 
 def test_history_includes_packets_that_the_display_skips() -> None:
-    history = nr.SampleHistory(capacity=32)
+    history = SampleHistory(capacity=32)
     for sequence in range(1, 6):
         history.append(frame(sequence, (sequence - 1) * 4))
     snapshot = history.snapshot(16)
@@ -58,7 +66,7 @@ def test_history_includes_packets_that_the_display_skips() -> None:
 
 @pytest.mark.parametrize("change", ["sequence", "channels", "rate", "size"])
 def test_history_resets_at_stream_discontinuities(change: str) -> None:
-    history = nr.SampleHistory(capacity=32)
+    history = SampleHistory(capacity=32)
     history.append(frame(1, 0))
     newest = frame(2, 4)
     if change == "sequence":
@@ -80,7 +88,7 @@ def test_history_resets_at_stream_discontinuities(change: str) -> None:
 def test_zoom_out_uses_history_and_fit_returns_to_latest_batch() -> None:
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
     app.frame_lock = threading.Lock()
-    app.sample_history = nr.SampleHistory(capacity=32)
+    app.sample_history = SampleHistory(capacity=32)
     app.time_zoom = 1.0
     app.time_pan = 0.0
     for sequence in range(1, 5):
@@ -102,17 +110,17 @@ def test_zoom_out_uses_history_and_fit_returns_to_latest_batch() -> None:
 def test_trigger_crossing_supports_rising_falling_and_nearest_match() -> None:
     samples = np.array([-1.0, 1.0, 1.0, -1.0, -1.0, 1.0])
 
-    assert nr.find_trigger_crossing(samples, 0.0, "Rising", target_index=1) == 1
-    assert nr.find_trigger_crossing(samples, 0.0, "Rising", target_index=5) == 5
-    assert nr.find_trigger_crossing(samples, 0.0, "Falling") == 3
-    assert nr.find_trigger_crossing(samples, 2.0, "Rising") is None
+    assert find_trigger_crossing(samples, 0.0, "Rising", target_index=1) == 1
+    assert find_trigger_crossing(samples, 0.0, "Rising", target_index=5) == 5
+    assert find_trigger_crossing(samples, 0.0, "Falling") == 3
+    assert find_trigger_crossing(samples, 2.0, "Rising") is None
 
 
 def test_raw_trigger_hysteresis_ignores_near_level_recrossings() -> None:
     samples = np.array([-10, -6, -2, 1, -1, 1, -1, 2, 6], dtype=np.int16)
-    history = nr.SampleHistory(capacity=len(samples))
+    history = SampleHistory(capacity=len(samples))
     history.append(
-        nr.SampleFrame(1, 1, 1000.0, len(samples), 0, 0, 0, memoryview(samples), None)
+        SampleFrame(1, 1, 1000.0, len(samples), 0, 0, 0, memoryview(samples), None)
     )
 
     assert history.find_channel_crossing_before(
@@ -135,14 +143,14 @@ def test_raw_trigger_hysteresis_ignores_near_level_recrossings() -> None:
 def test_adc_counts_use_stemlab_125_14_voltage_scale() -> None:
     samples = np.array([-8192, 0, 8191], dtype=np.int16)
 
-    volts = nr.adc_counts_to_volts(samples)
+    volts = adc_counts_to_volts(samples)
 
     np.testing.assert_allclose(volts, [-1.0, 0.0, 8191 / 8192])
 
 
 def test_trigger_uses_raw_history_when_display_decimation_misses_crossing() -> None:
     count = 200_000
-    display_indices = set(np.linspace(0, count - 1, nr.MAX_POINTS, dtype=np.intp))
+    display_indices = set(np.linspace(0, count - 1, MAX_POINTS, dtype=np.intp))
     pulse_index = next(
         index
         for index in range(100_000, 101_000)
@@ -150,7 +158,7 @@ def test_trigger_uses_raw_history_when_display_decimation_misses_crossing() -> N
     )
     samples = np.full(count, -1000, dtype=np.int16)
     samples[pulse_index : pulse_index + 2] = 1000
-    source = nr.SampleFrame(
+    source = SampleFrame(
         1,
         1,
         1_000_000.0,
@@ -163,7 +171,7 @@ def test_trigger_uses_raw_history_when_display_decimation_misses_crossing() -> N
     )
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
     app.frame_lock = threading.Lock()
-    app.sample_history = nr.SampleHistory(capacity=count)
+    app.sample_history = SampleHistory(capacity=count)
     app.sample_history.append(source)
     app.time_zoom = 2.0
     app.time_pan = 0.0
@@ -176,15 +184,15 @@ def test_trigger_uses_raw_history_when_display_decimation_misses_crossing() -> N
     app.trigger_status = Value("")
 
     channel_1, channel_2, _rate, search_count = app._channels_for_signal(source)
-    plotted_volts = nr.adc_counts_to_volts(channel_1)
+    plotted_volts = adc_counts_to_volts(channel_1)
 
     assert channel_2 is None
     assert search_count == count // 2
     assert app.trigger_window_precomputed
     assert app.precomputed_trigger_index == round(
-        (search_count - 1) * nr.TRIGGER_PRE_SAMPLES_FRACTION
+        (search_count - 1) * TRIGGER_PRE_SAMPLES_FRACTION
     )
-    assert nr.find_trigger_crossing(plotted_volts, 0.0, "Rising") is not None
+    assert find_trigger_crossing(plotted_volts, 0.0, "Rising") is not None
 
 
 def test_voltage_trigger_aligns_crossing_at_one_quarter_of_visible_period() -> None:
@@ -204,7 +212,7 @@ def test_voltage_trigger_aligns_crossing_at_one_quarter_of_visible_period() -> N
 
     assert (start, end, crossing) == (54, 79, 60)
     assert crossing - start == pytest.approx(
-        (end - start - 1) * nr.TRIGGER_PRE_SAMPLES_FRACTION,
+        (end - start - 1) * TRIGGER_PRE_SAMPLES_FRACTION,
         abs=1,
     )
 
@@ -232,7 +240,7 @@ def test_voltage_trigger_uses_history_to_align_a_full_batch() -> None:
 def test_trigger_searches_extra_history_without_expanding_the_display_window() -> None:
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
     app.frame_lock = threading.Lock()
-    app.sample_history = nr.SampleHistory(capacity=400)
+    app.sample_history = SampleHistory(capacity=400)
     app.time_zoom = 1.0
     app.time_pan = 0.0
     app.signal_scripts_enabled = False
@@ -256,7 +264,7 @@ def test_triggered_plot_stays_phase_aligned_across_packet_boundaries() -> None:
     period = 997
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
     app.frame_lock = threading.Lock()
-    app.sample_history = nr.SampleHistory(capacity=count * 3)
+    app.sample_history = SampleHistory(capacity=count * 3)
     app.time_zoom = 1.0
     app.time_pan = 0.0
     app.signal_scripts_enabled = False
@@ -271,7 +279,7 @@ def test_triggered_plot_stays_phase_aligned_across_packet_boundaries() -> None:
     for sequence in range(1, 6):
         indices = np.arange((sequence - 1) * count, sequence * count)
         samples = ((indices % period) - period // 2).astype(np.int16)
-        source = nr.SampleFrame(
+        source = SampleFrame(
             1,
             sequence,
             1_000_000.0,
@@ -317,7 +325,7 @@ def test_voltage_trigger_stays_armed_when_threshold_is_not_crossed() -> None:
 def test_display_trigger_noise_guard_rejects_recrossings_and_accepts_real_edges(edge, sign):
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
     app.frame_lock = threading.Lock()
-    app.sample_history = nr.SampleHistory(capacity=1024)
+    app.sample_history = SampleHistory(capacity=1024)
     app.time_zoom = 2.0
     app.time_pan = 0.0
     app.signal_scripts_enabled = False
@@ -328,7 +336,7 @@ def test_display_trigger_noise_guard_rejects_recrossings_and_accepts_real_edges(
     app.trigger_level = Value("0")
     app.trigger_status = Value("")
     noise = np.tile(np.array([-20, 20], dtype=np.int16), 256) * sign
-    source = nr.SampleFrame(1, 1, 1000, 512, 0, 0, 0, memoryview(noise), None)
+    source = SampleFrame(1, 1, 1000, 512, 0, 0, 0, memoryview(noise), None)
     app.sample_history.append(source)
     app._channels_for_signal(source)
     assert app.precomputed_trigger_index is None
@@ -343,8 +351,8 @@ def test_display_trigger_noise_guard_rejects_recrossings_and_accepts_real_edges(
 @pytest.mark.parametrize("edge,sign", [("Rising", 1), ("Falling", -1)])
 def test_downsampled_trigger_preserves_selected_edge_at_its_real_position(edge, sign):
     samples = (2000 * np.sin(np.arange(8192) * 2 * np.pi / 17.3)).astype(np.int16)
-    history = nr.SampleHistory(capacity=8192)
-    history.append(nr.SampleFrame(1, 1, 1000, len(samples), 0, 0, 0,
+    history = SampleHistory(capacity=8192)
+    history.append(SampleFrame(1, 1, 1000, len(samples), 0, 0, 0,
                                  memoryview(samples), None))
     capture = history.triggered_plot_channels(8192, 4096, 1, 0, edge, .25, 32, 80)
     assert capture.trigger_index is not None
@@ -360,30 +368,30 @@ def test_downsampled_trigger_preserves_selected_edge_at_its_real_position(edge, 
 
 @pytest.mark.parametrize("edge,sign", [("Rising", 1), ("Falling", -1)])
 def test_processed_signal_trigger_uses_the_same_noise_guard(edge, sign):
-    assert nr.find_trigger_crossing(np.array([-.002, .002, -.002, .002]) * sign,
+    assert find_trigger_crossing(np.array([-.002, .002, -.002, .002]) * sign,
                                     0, edge, hysteresis=.01) is None
-    assert nr.find_trigger_crossing(np.array([-.05, -.005, .005, .05]) * sign,
+    assert find_trigger_crossing(np.array([-.05, -.005, .005, .05]) * sign,
                                     0, edge, hysteresis=.01) == 2
 
 
 @pytest.mark.parametrize("edge,sign", [("Rising", 1), ("Falling", -1)])
 def test_noise_guard_can_arm_and_confirm_outside_the_allowed_edge_positions(edge, sign):
     samples = (np.arange(24) - 10).astype(np.int16) * sign
-    history = nr.SampleHistory(capacity=24)
-    history.append(nr.SampleFrame(1, 1, 1000, 24, 0, 0, 0, memoryview(samples), None))
+    history = SampleHistory(capacity=24)
+    history.append(SampleFrame(1, 1, 1000, 24, 0, 0, 0, memoryview(samples), None))
     assert history.find_channel_crossing_before(
         1, 24, 0, edge, target_index=12, minimum_index=8, hysteresis=5,
     ) == 10
-    assert nr.find_trigger_crossing(samples, 0, edge, minimum_index=8,
+    assert find_trigger_crossing(samples, 0, edge, minimum_index=8,
                                     maximum_index=12, hysteresis=5) == 10
 
 
 @pytest.mark.parametrize("edge", ["Rising", "Falling"])
 def test_one_batch_trigger_acquires_without_old_history_after_loss(edge):
     samples = (2000 * np.sin(np.arange(4096) * 2 * np.pi / 500 + .37)).astype(np.int16)
-    history = nr.SampleHistory(capacity=8192)
+    history = SampleHistory(capacity=8192)
     for sequence in range(1, 4):
-        history.append(nr.SampleFrame(1, sequence, 1000, 4096, 0, sequence, 0,
+        history.append(SampleFrame(1, sequence, 1000, 4096, 0, sequence, 0,
                                       memoryview(samples), None))
         assert history.size == 4096
         capture = history.triggered_plot_channels(8192, 4096, 1, 0, edge, .25, 800, 82)
@@ -396,7 +404,7 @@ def test_one_batch_trigger_acquires_without_old_history_after_loss(edge):
 
 
 def test_large_packet_keeps_the_history_within_its_memory_limit() -> None:
-    history = nr.SampleHistory(capacity=10)
+    history = SampleHistory(capacity=10)
     latest = frame(1, 0, count=20)
     history.append(latest)
     assert history.size == 10
@@ -404,13 +412,13 @@ def test_large_packet_keeps_the_history_within_its_memory_limit() -> None:
 
 
 def test_plot_samples_are_bounded_and_preserve_history_endpoints() -> None:
-    history = nr.SampleHistory(capacity=8192)
+    history = SampleHistory(capacity=8192)
     history.append(frame(1, 0, count=4096))
     history.append(frame(2, 4096, count=4096))
     first, second, rate, count = history.plot_channels(8192)
     assert count == 8192
     assert rate == 1000.0
-    assert len(first) == len(second) == nr.MAX_POINTS
+    assert len(first) == len(second) == MAX_POINTS
     assert first[0] == 0 and first[-1] == 8191
     assert second[0] == 0 and second[-1] == -8191
     history.append(frame(3, 8192, count=4096))
@@ -418,7 +426,7 @@ def test_plot_samples_are_bounded_and_preserve_history_endpoints() -> None:
 
 
 def test_plot_samples_follow_selected_resolution() -> None:
-    history = nr.SampleHistory(capacity=8192)
+    history = SampleHistory(capacity=8192)
     history.append(frame(1, 0, count=4096))
     first, second, _rate, _count = history.plot_channels(4096, 1600)
     assert len(first) == len(second) == 1600
@@ -426,16 +434,16 @@ def test_plot_samples_follow_selected_resolution() -> None:
 
 def test_default_time_span_starts_with_one_complete_batch() -> None:
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
-    app.time_span_choice = Value(nr.DEFAULT_TIME_SPAN)
+    app.time_span_choice = Value(DEFAULT_TIME_SPAN)
     app.time_zoom = 1.0
     app.time_pan = 0.0
     app.frame_lock = threading.Lock()
     app.latest_frame = frame(1, 0, count=1000)
     app._update_time_controls = lambda: None  # type: ignore[method-assign]
     app._redraw_latest_signal = lambda: None  # type: ignore[method-assign]
-    assert not app._apply_time_span_to_frame(nr.DEFAULT_TIME_SPAN, app.latest_frame)
+    assert not app._apply_time_span_to_frame(DEFAULT_TIME_SPAN, app.latest_frame)
     assert app.time_zoom == 1.0
-    assert app.time_span_choice.get() == nr.DEFAULT_TIME_SPAN
+    assert app.time_span_choice.get() == DEFAULT_TIME_SPAN
 
 
 def test_signal_resolution_controls_plot_points() -> None:
@@ -443,13 +451,13 @@ def test_signal_resolution_controls_plot_points() -> None:
     app.signal_resolution = Value("High")
     assert app._signal_plot_points() == 1600
     app.signal_resolution = Value("unknown")
-    assert app._signal_plot_points() == nr.MAX_POINTS
+    assert app._signal_plot_points() == MAX_POINTS
 
 
 def test_signal_script_receives_full_history_samples() -> None:
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
     app.frame_lock = threading.Lock()
-    app.sample_history = nr.SampleHistory(capacity=8192)
+    app.sample_history = SampleHistory(capacity=8192)
     app.sample_history.append(frame(1, 0, count=4096))
     app.latest_frame = frame(2, 4096, count=4096)
     app.sample_history.append(app.latest_frame)
@@ -481,7 +489,7 @@ def test_set_signal_script_requires_feature_flag() -> None:
     app = nr.ReceiverApp.__new__(nr.ReceiverApp)
     app.signal_scripts_enabled = False
 
-    with pytest.raises(ValueError, match=nr.SIGNAL_SCRIPT_FEATURE_ENV):
+    with pytest.raises(ValueError, match=SIGNAL_SCRIPT_FEATURE_ENV):
         app.set_signal_script("def process(signals, np):\n    return signals.get('selected.ch1')\n")
 
 

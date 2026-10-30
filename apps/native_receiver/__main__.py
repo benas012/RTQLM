@@ -1,3 +1,3 @@
-from apps.native_receiver.native_receiver import main
+from apps.native_receiver.entrypoint import main
 
 raise SystemExit(main())

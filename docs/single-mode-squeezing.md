@@ -15,23 +15,26 @@ separate checks.
 
 The **Single-mode preset** initially keeps the uploaded script's lab mode:
 nominal width **308 ns**, frequency parameter **6 MHz**, and the
-`lab_gaussian_linear_cosine` shape. **N_mode (samples)** is initially blank, so
-the count is calculated from that width and the actual ADC rate, with the same
+`lab_gaussian_linear_cosine` shape. Edit **T width (µs)**; **Samples / mode** is
+a read-only result calculated from that width and the actual ADC rate, with the same
 integer truncation as the script:
 
 ```text
 N_mode = int(308 ns * Fs)
 ```
 
-An explicit **N_mode (samples)** instead sets the number of consecutive ADC
-samples in one mode. With sample rate `Fs`, the actual mode duration is:
+The other analytic shapes round to the nearest whole sample. Changing the ADC
+rate keeps the entered width and updates the displayed count. With sample rate
+`Fs`, the actual mode duration is:
 
 ```text
 mode duration = N_mode / Fs
 ```
 
 For an optional initial constant, or identity, mode choose `identity` and enter
-an explicit N_mode. Every complete bin becomes one number: a weighted sum of its
+its T width. Legacy API configurations with an explicit `modeSamples` count are
+still supported; the UI converts them to their equivalent time width at the
+selected rate. Every complete bin becomes one number: a weighted sum of its
 samples. Discrete identity weights are normalized and bins are projected as
 follows:
 
@@ -64,8 +67,8 @@ script's integer-bin convention; it does not establish accurate optical timing.
 Increasing the rate also increases transport and processing requirements. Use a
 higher sustained acquisition rate only after checking the actual connection for
 lost samples; this document does not recommend unverified continuous 125 MS/s.
-The optional flat-mode example of 16 samples lasts 1.024 microseconds at
-15.625 MS/s and is not a lab mode choice.
+For example, a flat mode with T width 1.024 microseconds gives 16 samples at
+15.625 MS/s. This is a different mode from the 308 ns lab choice.
 
 Only complete modes are used. Ordinary network packet boundaries do not restart
 the bins. Incomplete modes are discarded at a collection boundary or a detected
@@ -232,3 +235,21 @@ Changing the mode, ADC rate, detector gain, local-oscillator conditions, or
 calculation settings requires a matching calibration. Consult
 [the cluster-processing guide](nullifiers.md) when the objective is the uploaded
 script's cluster nullifiers rather than independent single-mode squeezing.
+
+## Keeping the live chart steady
+
+The Nullifiers chart keeps its time span and vertical range between incoming
+batches. **Time + / Time -** show a shorter or longer span; **Y + / Y -** zoom
+the vertical range. **Fit** fits both axes to the latest valid data and then
+holds that range. These controls also appear in the configuration window.
+Changing the plotted quantity or processing settings resets the view.
+Zoom changes only the display; it does not change mode bins, variance windows,
+calibration, or recorded samples.
+
+When a batch has no finite estimate, the chart retains the last valid trace
+and explicitly marks it **Showing last valid chart; no current estimate**.
+Missing data and excluded intervals still produce gaps in new traces.
+Values outside the fixed range are clipped at the plot edge, with a notice to
+use Fit or zoom out. A zero variance gives minus infinity dB; it is not replaced
+with a finite squeezing value. Starting, finishing or clearing calibration
+clears the previous chart so a held trace cannot use an old reference.

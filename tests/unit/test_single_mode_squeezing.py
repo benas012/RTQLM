@@ -99,7 +99,7 @@ def test_lab_mode_single_preset_has_pooled_calibration_and_exact_count_window():
 
 @pytest.mark.parametrize("data", [{"modeSamples": 2.5}, {"varianceWindowModes": True},
                                   {"varianceWindowModes": 6000, "historyModes": 5000},
-                                  {"modeShape": "identity"},
+                                  {"modeShape": "identity", "modeWidthSeconds": 0},
                                   {"analysisMode": "single", "varianceEstimator": "ensemble"},
                                   {"analysisMode": "single", "varianceEstimator": "lab_rolling"},
                                   {"modeSamples": 4, "explicitModeTemplate": [1., 2.]}])

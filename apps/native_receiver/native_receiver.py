@@ -1,137 +1,51 @@
-# This module intentionally re-exports the receiver's public API for compatibility.
-# ruff: noqa: F401
 from __future__ import annotations
 
-import ctypes
 import queue
 import subprocess
-import sys
 import threading
 import tkinter as tk
 from collections.abc import Callable
 from typing import Any
-from urllib.request import urlopen
 
-try:
-    import numpy as np
-    import websockets
-except ImportError as exc:  # pragma: no cover - user-facing startup guard
-    raise SystemExit("Missing dependency. Run this with `uv run`.") from exc
+import numpy as np
 
 from apps.native_receiver.acquisition_controls import AcquisitionControlsMixin
-from apps.native_receiver.api_client import ApiClientMixin
-from apps.native_receiver.connection_overlay import ConnectionOverlayMixin
+from apps.native_receiver.api_client import EngineClient
 from apps.native_receiver.constants import (
-    ADC_COUNTS_PER_VOLT,
     COLORS,
-    CONNECTION_FAILED_NOTICE,
-    CONNECTION_FAILED_SPECTRUM_NOTICE,
-    CONNECTION_FAILURE_BUSY_LABELS,
-    CONNECTION_OVERLAY_BG,
-    CONNECTION_OVERLAY_BUSY_LABELS,
-    CONNECTION_OVERLAY_OPACITY,
     DEFAULT_SIGNAL_RESOLUTION,
     DEFAULT_SIGNAL_SCRIPT,
     DEFAULT_TIME_SPAN,
     DIMENSIONS,
-    DISCONNECTED_STATES,
-    ENGINE_CONNECT_TIMEOUT_SECONDS,
-    ENGINE_HEALTH_TIMEOUT_SECONDS,
-    ENGINE_PING_INTERVAL_MS,
-    ENGINE_PROCESS_TITLE,
-    ENGINE_READY_TIMEOUT_SECONDS,
     FONTS,
-    HISTORY_MAX_SAMPLES,
-    MAX_POINTS,
-    READY_STATES,
-    REDPITAYA_CONNECT_TIMEOUT_SECONDS,
-    REDPITAYA_START_TIMEOUT_SECONDS,
-    SIGNAL_PLOT_TOP_PAD,
-    SIGNAL_RESOLUTION_POINTS,
-    SPECTRUM_MIN_INTERVAL_MS,
-    STATS_MIN_INTERVAL_MS,
-    STREAMING_STATES,
-    TEST_SINE_AMPLITUDE_VOLTS,
-    TEST_SINE_FREQUENCY_HZ,
-    TIME_SPANS_MS,
-    TIME_ZOOM_MIN,
-    TOAST_FADE_INTERVAL_MS,
-    TOAST_FADE_STEPS,
-    TOAST_VISIBLE_MS,
     TRIGGER_HYSTERESIS_VOLTS,
-    TRIGGER_PRE_SAMPLES_FRACTION,
     UI_FRAME_INTERVAL_MS,
-    UI_LOGGER,
-    WIDE_VIEW_AUTO_INTERVAL_MS,
-    WIDE_VIEW_FAST_REFRESH_SECONDS,
-    WORKSPACE_ROOT,
 )
 from apps.native_receiver.device_controller import DeviceControllerMixin
-from apps.native_receiver.device_repository import DeviceRepositoryMixin
 from apps.native_receiver.device_tabs import DeviceTabsMixin
 from apps.native_receiver.dialogs import (
-    AddRedPitayaDialog,
-    ApiError,
-    EngineSettingsDialog,
-    SignalScriptDialog,
-    ToolTip,
     configure_ui_logging,
-    position_dialog,
 )
 from apps.native_receiver.engine_controller import EngineControllerMixin
-from apps.native_receiver.entrypoint import main
-from apps.native_receiver.frame_processor import FrameProcessorMixin
+from apps.native_receiver.entrypoint import main as main
 from apps.native_receiver.helpers import (
-    acquisition_batch_seconds,
-    acquisition_channel_count,
-    adc_counts_to_volts,
-    compute_spectrum,
-    device_slug,
-    display_interval_ms,
-    draw_channel,
-    draw_spectrum_line,
-    editable_profile_payload,
-    find_trigger_crossing,
-    format_duration,
-    format_frequency,
-    format_voltage,
-    max_sample_abs,
-    next_frame_delay_ms,
-    normalize_script_channel,
-    safe_builtins,
-    sample_range,
-    samples_to_numpy,
-    set_if_changed,
-    short_error,
-    smooth_acquisition_block_size,
-    start_display_timer,
     terminate_process_tree,
-    time_monotonic_ns,
-    update_trace_line,
 )
-from apps.native_receiver.instrument_controls import InstrumentControlsMixin
 from apps.native_receiver.layout import LayoutMixin
 from apps.native_receiver.notifications import NotificationsMixin
-from apps.native_receiver.protocol import Device, SampleFrame, SampleHistory, parse_frame
+from apps.native_receiver.protocol import Device, SampleFrame, SampleHistory
 from apps.native_receiver.receiver_tools import ReceiverToolsMixin
 from apps.native_receiver.settings import (
-    SIGNAL_SCRIPT_FEATURE_ENV,
-    AppSettings,
     load_cluster_config,
     load_settings,
     signal_script_feature_enabled,
 )
-from apps.native_receiver.sidebar_ui import SidebarUiMixin
 from apps.native_receiver.signal_view import SignalViewMixin
-from apps.native_receiver.spectrum_renderer import SpectrumRendererMixin
 from apps.native_receiver.spectrum_ui import SpectrumUiMixin
-from apps.native_receiver.state import ReceiverStateMixin
 from apps.native_receiver.stream_controller import StreamControllerMixin
-from apps.native_receiver.theme import ThemeMixin
-from apps.native_receiver.time_controls import TimeControlsMixin
+from apps.native_receiver.theme import configure_style
 from apps.native_receiver.waveform_renderer import WaveformRendererMixin
 from apps.native_receiver.waveform_ui import WaveformUiMixin
-from apps.native_receiver.workspace_ui import WorkspaceUiMixin
 from quantum_light_engine.post_processing import (
     ClusterProcessingResult,
     RealtimeClusterProcessor,
@@ -139,40 +53,29 @@ from quantum_light_engine.post_processing import (
 
 
 class ReceiverApp(
-    ReceiverStateMixin,
-    ThemeMixin,
     LayoutMixin,
-    SidebarUiMixin,
-    WorkspaceUiMixin,
     WaveformUiMixin,
     SpectrumUiMixin,
-    ConnectionOverlayMixin,
     DeviceTabsMixin,
-    TimeControlsMixin,
-    InstrumentControlsMixin,
     SignalViewMixin,
     AcquisitionControlsMixin,
     ReceiverToolsMixin,
     EngineControllerMixin,
     NotificationsMixin,
-    DeviceRepositoryMixin,
     DeviceControllerMixin,
     StreamControllerMixin,
-    FrameProcessorMixin,
     WaveformRendererMixin,
-    SpectrumRendererMixin,
-    ApiClientMixin,
     tk.Tk,
 ):
     def __init__(self) -> None:
         configure_ui_logging()
         super().__init__()
         self.title("RTQLM · Native receiver")
-        self.geometry("1180x840")
+        self.geometry("1280x900")
         self.minsize(DIMENSIONS["min_width"], DIMENSIONS["min_height"])
 
         self.settings = load_settings()
-        self._configure_style()
+        configure_style(self)
         self._initialize_ui_state()
         self._initialize_processing_state()
         self._initialize_runtime_state()
@@ -184,3 +87,219 @@ class ReceiverApp(
         self.rowconfigure(0, weight=1)
         self._build_sidebar()
         self._build_workspace()
+
+    def _initialize_ui_state(self) -> None:
+        self.ui_colors = COLORS
+        self.ui_fonts = FONTS
+        self.api_base = tk.StringVar(value=self.settings.api_base)
+        self.launch_engine_on_start = tk.BooleanVar(value=self.settings.launch_engine_on_start)
+        self.status = tk.StringVar(value="disconnected")
+        self.calibration_progress = tk.DoubleVar(value=0.0)
+        self.calibration_text = tk.StringVar(value="Shot noise · 10 s")
+        self.acquisition_state = tk.StringVar(value="Disconnected")
+        self.engine_status = tk.StringVar(value="UNKNOWN")
+        self.selected = tk.StringVar(value="-")
+        self.frames = tk.StringVar(value="0")
+        self.sequence = tk.StringVar(value="-")
+        self.sample_rate = tk.StringVar(value="-")
+        self.samples = tk.StringVar(value="-")
+        self.mask = tk.StringVar(value="-")
+        self.ch1_range = tk.StringVar(value="-")
+        self.ch2_range = tk.StringVar(value="-")
+        self.lost1 = tk.StringVar(value="0")
+        self.lost2 = tk.StringVar(value="0")
+        self.lost_pair = tk.StringVar(value="0 / 0")
+        self.flags = tk.StringVar(value="0")
+        self.script_status = tk.StringVar(value="signal script disabled")
+        self.activity = tk.StringVar(value="")
+        self.loading_message = tk.StringVar(value="Ready")
+        self.spectrum_channel = tk.StringVar(value="CH1")
+        self.spectrum_fft_size = tk.StringVar(value="4096")
+        self.spectrum_scale = tk.StringVar(value="dBFS")
+        self.spectrum_peak = tk.StringVar(value="Peak: -")
+        self.timebase = tk.StringVar(value="- ms/div")
+        self.time_zoom_label = tk.StringVar(value="1.0x")
+        self.time_window_label = tk.StringVar(value="Full capture")
+        self.time_span_choice = tk.StringVar(value=DEFAULT_TIME_SPAN)
+        self.display_mode = tk.StringVar(value="Auto")
+        self.signal_resolution = tk.StringVar(value=DEFAULT_SIGNAL_RESOLUTION)
+        self.pause_label = tk.StringVar(value="Pause")
+        self.display_detail = tk.StringVar(value="Live")
+        self.diagnostics_expanded = tk.BooleanVar(value=False)
+        self.device_empty_message = tk.StringVar(value="No Red Pitayas registered")
+        self.connection_summary = tk.StringVar(value="No device selected")
+        self.cursor_status = tk.StringVar(value="Cursor off")
+        self.trigger_enabled = tk.BooleanVar(value=False)
+        self.trigger_channel = tk.StringVar(value="CH1")
+        self.trigger_edge = tk.StringVar(value="Rising")
+        self.trigger_level = tk.StringVar(value="0.0")
+        self.trigger_hysteresis = tk.StringVar(value=f"{TRIGGER_HYSTERESIS_VOLTS:g}")
+        self.trigger_status = tk.StringVar(value="Trigger off")
+        self.test_output_label = tk.StringVar(value="OUT1 sine")
+        self.y_axis_range_label = tk.StringVar(value="Y range ±1.00 V")
+        self.channel_1_visible = tk.BooleanVar(value=True)
+        self.channel_2_visible = tk.BooleanVar(value=True)
+        self.channel_1_offset_divisions = tk.DoubleVar(value=0.0)
+        self.channel_2_offset_divisions = tk.DoubleVar(value=0.0)
+        self.channel_1_offset_label = tk.StringVar(value="CH1 0.0 div")
+        self.channel_2_offset_label = tk.StringVar(value="CH2 0.0 div")
+        self.acquisition_decimation = tk.StringVar(value="64")
+        self.acquisition_block_size = tk.StringVar(value="16384")
+        self.acquisition_rate = tk.StringVar(value="Sample rate: 1.95 MHz")
+        self.acquisition_batch = tk.StringVar(value="Batch: -")
+        self.connection_overlay_title = tk.StringVar(value="")
+        self.connection_overlay_detail = tk.StringVar(value="")
+
+    def _initialize_processing_state(self) -> None:
+        self.display_paused = False
+        self.paused_frame: SampleFrame | None = None
+        self.paused_history: SampleHistory | None = None
+        self.pending_time_span_choice = True
+        self.signal_padding_samples = 0
+        self.signal_window_samples = 0
+        self.last_display_monotonic_ns = 0
+        self.trigger_capture_valid = False
+        self.trigger_window_precomputed = False
+        self.precomputed_trigger_index: float | None = None
+        self.test_output_enabled = False
+        self.test_output_device_id: str | None = None
+        self.signal_scripts_enabled = signal_script_feature_enabled()
+        self.signal_script = DEFAULT_SIGNAL_SCRIPT
+        self.signal_processor: Callable[[dict[str, np.ndarray[Any, Any]], Any], Any] | None = None
+        self.cluster_processor = RealtimeClusterProcessor(load_cluster_config())
+        self.cluster_lock = threading.Lock()
+        self.latest_cluster_result: ClusterProcessingResult | None = None
+        self.cluster_error: str | None = None
+        self.cluster_last_sequence: int | None = None
+        self.cluster_dialog: tk.Toplevel | None = None
+        self._calibration_started: float | None = None
+        self._calibration_after_id: str | None = None
+        self._calibration_target: tuple[str, str] | None = None
+
+    def _initialize_runtime_state(self) -> None:
+        self.devices: list[Device] = []
+        self.selected_device: Device | None = None
+        self.open_device_ids: list[str] = []
+        self.tab_hitboxes: list[tuple[float, float, str]] = []
+        self.socket_thread: threading.Thread | None = None
+        self.stop_event = threading.Event()
+        self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
+        self.frame_count = 0
+        self.socket_frame_count = 0
+        self.rendered_frame_count = 0
+        self.latest_frame: SampleFrame | None = None
+        self.sample_history = SampleHistory()
+        self.frame_lock = threading.Lock()
+        self.last_render_monotonic_ns = 0
+        self.last_stats_monotonic_ns = 0
+        self.grid_items: list[int] = []
+        self.trace_items: list[int] = []
+        self.spectrum_grid_items: list[int] = []
+        self.spectrum_trace_items: list[int] = []
+        self.signal_notice_items: list[int] = []
+        self.spectrum_notice_items: list[int] = []
+        self.axis_y_abs = 1.0
+        self.y_axis_fit_pending = True
+        self.y_axis_dirty = False
+        self.axis_sample_rate_hz = 0.0
+        self.axis_samples_per_channel = 0
+        self.axis_trigger_offset_samples: float | None = None
+        self.time_zoom = 1.0
+        self.time_pan = 0.0
+        self.cursor_enabled = False
+        self.spectrum_axis_sample_rate_hz = 0.0
+        self.spectrum_axis_scale = self.spectrum_scale.get()
+        self.last_spectrum_monotonic_ns = 0
+        self.last_frame_log_monotonic_ns = 0
+        self.loading_active = False
+        self.loading_label = ""
+        self.spinner_running = False
+        self.spinner_index = 0
+        self.spinner_token = 0
+        self.engine_status_dot: tk.Canvas | None = None
+        self.engine_status_dot_item: int | None = None
+        self.toast_frames: list[tk.Toplevel] = []
+        self.connection_failure_active = False
+        self.connection_overlay: tk.Toplevel | None = None
+        self.connection_overlay_canvas: tk.Canvas | None = None
+        self.connection_overlay_bg_rect: int | None = None
+        self.connection_overlay_spinner_track: int | None = None
+        self.connection_overlay_spinner_arc: int | None = None
+        self.connection_overlay_title_item: int | None = None
+        self.connection_overlay_detail_item: int | None = None
+        self.engine_ping_in_flight = False
+        self.signal_resize_after_id: str | None = None
+        self.spectrum_resize_after_id: str | None = None
+        self.control_layout_after_id: str | None = None
+        self._last_control_layout = ""
+        self.closing = False
+        self.engine_process: subprocess.Popen[str] | None = None
+
+    def _start_receiver(self) -> None:
+        self._build_menu()
+        self._build()
+        self._bind_shortcuts()
+        self._set_engine_status("UNKNOWN")
+        self._ui_log("app opened", api_base=self.api_base.get())
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.after(UI_FRAME_INTERVAL_MS, self._drain_events)
+        self.after(1000, self._ping_engine_status_async)
+        if self.launch_engine_on_start.get():
+            self.after(100, self.ensure_engine_running)
+            self.after(2500, self.refresh_devices)
+        else:
+            self.refresh_devices()
+
+    def _on_close(self) -> None:
+        self._ui_log("app closing")
+        if self.__dict__.get("_calibration_started") is not None:
+            try:
+                self.clear_cluster_calibration()
+            except Exception as exc:
+                self._ui_log("calibration cleanup failed", error=str(exc))
+                self._cancel_calibration_timer()
+        self.closing = True
+        self.stop_event.set()
+        self._stop_spinner()
+        try:
+            for callback_id in self.tk.call("after", "info"):
+                try:
+                    self.after_cancel(callback_id)
+                except tk.TclError:
+                    pass
+        except tk.TclError:
+            pass
+        for toast in [*self.toast_frames]:
+            self._dismiss_toast(toast)
+        if self.connection_overlay is not None and self.connection_overlay.winfo_exists():
+            self.connection_overlay.destroy()
+        if self.engine_process and self.engine_process.poll() is None:
+            self._prepare_engine_shutdown(timeout_seconds=3)
+            terminate_process_tree(self.engine_process)
+        self.destroy()
+
+    def _api_base(self) -> str:
+        return self.api_base.get().strip().rstrip("/")
+
+    def _api(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+        *,
+        timeout_seconds: float = 10,
+    ) -> Any:
+        return self._api_for_base(
+            self._api_base(), method, path, body, timeout_seconds=timeout_seconds
+        )
+
+    def _api_for_base(
+        self,
+        api_base: str,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+        *,
+        timeout_seconds: float = 10,
+    ) -> Any:
+        return EngineClient(api_base).request(method, path, body, timeout_seconds=timeout_seconds)

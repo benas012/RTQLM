@@ -10,8 +10,10 @@ from quantum_light_engine.api.errors import EngineApiError, not_found, state_con
 from quantum_light_engine.api.schemas import TestOutputRequest
 from quantum_light_engine.devices.discovery import SavedProfileDiscovery
 from quantum_light_engine.devices.models import DeviceProfileCreate, DeviceProfileUpdate
+from quantum_light_engine.devices.nullifiers import NullifierCommand
 from quantum_light_engine.devices.session import DeviceSession
 from quantum_light_engine.devices.session_manager import DeviceSessionManager
+from quantum_light_engine.devices.trigger import TriggerConfig
 from redpitaya_acquisition.redpitaya.output_signals import OutputSignalsConfig
 
 router = APIRouter(prefix="/api/v1/devices")
@@ -196,6 +198,27 @@ async def device_status(request: Request, device_id: UUID) -> dict[str, Any]:
     return _session(request, device_id).status()
 
 
+@router.get("/{device_id}/trigger")
+async def get_trigger(request: Request, device_id: UUID) -> dict[str, object]:
+    return _session(request, device_id).trigger.status()
+
+
+@router.put("/{device_id}/trigger")
+async def configure_trigger(
+    request: Request, device_id: UUID, config: TriggerConfig
+) -> dict[str, object]:
+    session = _session(request, device_id)
+    try:
+        return await session.configure_trigger(config)
+    except RuntimeError as exc:
+        detail = str(exc)
+        if "only available" in detail or "stop ADC acquisition" in detail:
+            raise state_conflict(device_id, detail) from exc
+        raise EngineApiError(
+            "external-trigger-unavailable", "External trigger unavailable", 503, detail, device_id
+        ) from exc
+
+
 @router.get("/{device_id}/latest")
 async def latest(request: Request, device_id: UUID) -> dict[str, Any]:
     metadata = _session(request, device_id).manager.latest_metadata()
@@ -208,3 +231,37 @@ async def latest(request: Request, device_id: UUID) -> dict[str, Any]:
             device_id,
         )
     return metadata
+
+
+@router.get("/{device_id}/nullifiers")
+async def nullifier_status(request: Request, device_id: UUID) -> dict[str, object]:
+    return await asyncio.to_thread(_session(request, device_id).nullifiers.status)
+
+
+@router.post("/{device_id}/nullifiers/commands")
+async def nullifier_command(
+    request: Request, device_id: UUID, command: NullifierCommand,
+) -> dict[str, object]:
+    processor = _session(request, device_id).nullifiers
+    try:
+        return await asyncio.to_thread(processor.execute, command)
+    except ValueError as exc:
+        code = 422 if command.command == "configure" else 409
+        raise EngineApiError(
+            "invalid-nullifier-command", "Nullifier command rejected", code, str(exc), device_id,
+        ) from exc
+    except RuntimeError as exc:
+        raise EngineApiError(
+            "nullifier-state-conflict", "Nullifier command rejected", 409, str(exc), device_id,
+        ) from exc
+
+
+@router.get("/{device_id}/nullifiers/latest")
+async def latest_nullifiers(request: Request, device_id: UUID) -> dict[str, object]:
+    result = await asyncio.to_thread(_session(request, device_id).nullifiers.latest)
+    if result is None:
+        raise EngineApiError(
+            "nullifiers-not-available", "No nullifier result available", 404,
+            "Configure nullifier processing and acquire complete temporal modes.", device_id,
+        )
+    return result

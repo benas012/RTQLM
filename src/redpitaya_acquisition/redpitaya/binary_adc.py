@@ -109,7 +109,9 @@ class BinaryADCClient:
         host = self._config.getHosts()[0]
         self._request(host, "requestADCServerStop", "adcServerStopped")
         self._request(host, "requestADCServerStart", "adcServerStartedTCP")
-        connection = socket.create_connection((host, ADC_PORT), timeout=5)
+        connection = socket.create_connection(
+            (host, self._settings.native_nullifier_port or ADC_PORT), timeout=5,
+        )
         connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         # Match the vendor client's large receive buffer. Windows' default can
         # throttle the board while callback/IPC work temporarily delays reads.

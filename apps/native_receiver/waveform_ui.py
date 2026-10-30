@@ -12,10 +12,10 @@ from apps.native_receiver.constants import (
 
 class WaveformUiMixin:
     def _build_waveform_panel(self, main: ttk.Frame) -> None:
-        signal_header = ttk.Frame(main, style="Toolbar.TFrame", padding=(12, 8))
-        signal_header.grid(row=4, column=0, sticky="ew", padx=12, pady=(4, 0))
+        signal_header = ttk.Frame(main, style="Toolbar.TFrame", padding=(12, 10))
+        signal_header.grid(row=4, column=0, sticky="ew")
         signal_header.columnconfigure(1, weight=1)
-        ttk.Label(signal_header, text="Live waveform", style="Section.TLabel").grid(
+        ttk.Label(signal_header, text="Live signal", style="Section.TLabel").grid(
             row=0, column=0, sticky="w"
         )
         legend = ttk.Frame(signal_header, style="Toolbar.TFrame")
@@ -34,12 +34,11 @@ class WaveformUiMixin:
             command=self._redraw_latest_signal,
             style="CH2.Toolbar.TCheckbutton",
         ).grid(row=0, column=1, padx=(0, 16))
-        ttk.Label(legend, textvariable=self.ch1_range, width=25, style="Toolbar.TLabel").grid(
-            row=0, column=2, padx=(0, 12)
+        self.waveform_controls_button = ttk.Button(
+            legend, text="Display controls…", style="Quiet.TButton",
+            command=self._toggle_waveform_controls,
         )
-        ttk.Label(legend, textvariable=self.ch2_range, width=25, style="Toolbar.TLabel").grid(
-            row=0, column=3
-        )
+        self.waveform_controls_button.grid(row=0, column=2)
 
         self.canvas = tk.Canvas(
             main,
@@ -47,32 +46,53 @@ class WaveformUiMixin:
             highlightthickness=1,
             highlightbackground=COLORS["grid"],
             relief="flat",
+            height=140,
         )
-        self.canvas.grid(row=5, column=0, sticky="nsew", padx=12)
+        self.canvas.grid(row=5, column=0, sticky="nsew")
         self.canvas.bind("<Configure>", self._resize_signal_plot)
         self._set_signal_notice("No live signal\nSelect a Red Pitaya and connect to begin")
 
         self.signal_controls = ttk.Frame(main, style="Toolbar.TFrame", padding=(10, 8))
-        self.signal_controls.grid(row=6, column=0, sticky="ew", padx=12, pady=(0, 8))
+        self.signal_controls.grid(row=6, column=0, sticky="ew", pady=(0, 8))
         self.signal_controls.columnconfigure((0, 1), weight=1)
+        self.display_settings_window = tk.Toplevel(self)
+        self.display_settings_window.withdraw()
+        self.display_settings_window.title("Display controls")
+        self.display_settings_window.transient(self)
+        self.display_settings_window.resizable(False, False)
+        self.display_settings_window.configure(bg=COLORS["surface_elevated"])
+        self.display_settings_window.protocol("WM_DELETE_WINDOW", self._hide_waveform_controls)
+        self.display_settings_window.bind("<Escape>", lambda _event: self._hide_waveform_controls())
+        self.advanced_signal_controls = ttk.Frame(
+            self.display_settings_window, style="Toolbar.TFrame", padding=20
+        )
+        self.advanced_signal_controls.pack(fill="both", expand=True)
+        ttk.Label(self.advanced_signal_controls, text="Display controls",
+                   style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(self.advanced_signal_controls,
+                   text="Waveform display only. Set collection timing in Mode setup.",
+                   style="Toolbar.TLabel").grid(row=1, column=0, sticky="w", pady=(5, 0))
         self._build_time_vertical_controls()
         self._build_channel_display_controls()
         self._build_trigger_controls()
 
     def _build_time_vertical_controls(self) -> None:
-        self.time_control_group = ttk.Frame(self.signal_controls, style="ControlGroup.TFrame")
+        self.time_control_group = ttk.Frame(self.advanced_signal_controls,
+                                            style="ControlGroup.TFrame")
         ttk.Label(self.time_control_group, text="TIME", style="GroupLabel.TLabel").pack(
             side="left", padx=(0, 8)
         )
         ttk.Button(
             self.time_control_group,
-            text="Zoom out",
+            text="−",  # noqa: RUF001
+            width=3,
             style="Compact.TButton",
             command=lambda: self.zoom_time(0.5),
         ).pack(side="left", padx=2)
         ttk.Button(
             self.time_control_group,
-            text="Zoom in",
+            text="+",
+            width=3,
             style="Compact.TButton",
             command=lambda: self.zoom_time(2.0),
         ).pack(side="left", padx=2)
@@ -91,13 +111,15 @@ class WaveformUiMixin:
             command=lambda: self.pan_time(0.12),
         ).pack(side="left", padx=2)
         ttk.Button(
-            self.time_control_group, text="Fit", style="Compact.TButton", command=self.fit_time
+            self.time_control_group, text="Fit", width=5,
+            style="Compact.TButton", command=self.fit_time
         ).pack(side="left", padx=(6, 6))
         ttk.Label(
             self.time_control_group, textvariable=self.timebase, style="Toolbar.TLabel", width=14
         ).pack(side="left")
 
-        self.vertical_control_group = ttk.Frame(self.signal_controls, style="ControlGroup.TFrame")
+        self.vertical_control_group = ttk.Frame(self.advanced_signal_controls,
+                                                style="ControlGroup.TFrame")
         ttk.Label(self.vertical_control_group, text="VERTICAL", style="GroupLabel.TLabel").pack(
             side="left", padx=(0, 8)
         )
@@ -127,7 +149,8 @@ class WaveformUiMixin:
         ).pack(side="left")
 
     def _build_channel_display_controls(self) -> None:
-        self.channel_control_group = ttk.Frame(self.signal_controls, style="ControlGroup.TFrame")
+        self.channel_control_group = ttk.Frame(self.advanced_signal_controls,
+                                               style="ControlGroup.TFrame")
         ttk.Label(self.channel_control_group, text="CHANNELS", style="GroupLabel.TLabel").pack(
             side="left", padx=(0, 8)
         )
@@ -212,27 +235,33 @@ class WaveformUiMixin:
             command=self.toggle_display_pause,
         )
         self.pause_button.pack(side="left", padx=(0, 8))
+        ttk.Button(self.display_control_group, text="Fit", width=4,
+                   style="Compact.TButton", command=self.fit_time).pack(side="left", padx=(0, 8))
         ttk.Label(
             self.display_control_group,
             textvariable=self.display_detail,
             style="Toolbar.TLabel",
-            width=22,
-        ).pack(side="left")
+        )
 
     def _build_trigger_controls(self) -> None:
-        self.trigger_control_group = ttk.Frame(self.signal_controls, style="ControlGroup.TFrame")
-        ttk.Label(self.trigger_control_group, text="TRIGGER", style="GroupLabel.TLabel").pack(
+        self.trigger_control_group = ttk.Frame(self.advanced_signal_controls,
+                                               style="ControlGroup.TFrame")
+        primary = ttk.Frame(self.trigger_control_group, style="Toolbar.TFrame")
+        primary.pack(anchor="w")
+        secondary = ttk.Frame(self.trigger_control_group, style="Toolbar.TFrame")
+        secondary.pack(anchor="w", pady=(10, 0))
+        ttk.Label(primary, text="TRIGGER", style="GroupLabel.TLabel").pack(
             side="left", padx=(0, 8)
         )
         ttk.Checkbutton(
-            self.trigger_control_group,
+            primary,
             text="On",
             variable=self.trigger_enabled,
             command=self.apply_trigger_settings,
             style="Toolbar.TCheckbutton",
         ).pack(side="left", padx=(0, 7))
         trigger_channel_box = ttk.Combobox(
-            self.trigger_control_group,
+            primary,
             textvariable=self.trigger_channel,
             values=("CH1", "CH2"),
             state="readonly",
@@ -240,41 +269,41 @@ class WaveformUiMixin:
         )
         trigger_channel_box.pack(side="left", padx=(0, 6))
         trigger_edge_box = ttk.Combobox(
-            self.trigger_control_group,
+            primary,
             textvariable=self.trigger_edge,
             values=("Rising", "Falling"),
             state="readonly",
             width=8,
         )
         trigger_edge_box.pack(side="left", padx=(0, 6))
-        ttk.Label(self.trigger_control_group, text="Level", style="Toolbar.TLabel").pack(
+        ttk.Label(primary, text="Level", style="Toolbar.TLabel").pack(
             side="left"
         )
         trigger_level_entry = ttk.Entry(
-            self.trigger_control_group, textvariable=self.trigger_level, width=8
+            primary, textvariable=self.trigger_level, width=8
         )
         trigger_level_entry.pack(side="left", padx=(5, 3))
-        ttk.Label(self.trigger_control_group, text="V", style="Toolbar.TLabel").pack(
+        ttk.Label(primary, text="V", style="Toolbar.TLabel").pack(
             side="left", padx=(0, 6)
         )
-        ttk.Label(self.trigger_control_group, text="Noise guard", style="Toolbar.TLabel").pack(
+        ttk.Label(secondary, text="Noise guard", style="Toolbar.TLabel").pack(
             side="left"
         )
         trigger_guard_entry = ttk.Entry(
-            self.trigger_control_group, textvariable=self.trigger_hysteresis, width=6,
+            secondary, textvariable=self.trigger_hysteresis, width=6,
         )
         trigger_guard_entry.pack(side="left", padx=(5, 3))
-        ttk.Label(self.trigger_control_group, text="V", style="Toolbar.TLabel").pack(
+        ttk.Label(secondary, text="V", style="Toolbar.TLabel").pack(
             side="left", padx=(0, 6)
         )
         ttk.Button(
-            self.trigger_control_group,
+            secondary,
             text="Apply",
             style="Compact.TButton",
             command=self.apply_trigger_settings,
         ).pack(side="left", padx=(0, 8))
         self.test_output_button = ttk.Button(
-            self.trigger_control_group,
+            secondary,
             textvariable=self.test_output_label,
             style="Compact.TButton",
             command=self.toggle_test_output,
@@ -287,7 +316,7 @@ class WaveformUiMixin:
             command=self.open_output_signals,
         ).pack(side="left", padx=(0, 8))
         ttk.Label(
-            self.trigger_control_group,
+            secondary,
             textvariable=self.trigger_status,
             style="Toolbar.TLabel",
             width=27,
@@ -300,9 +329,3 @@ class WaveformUiMixin:
         trigger_level_entry.bind("<FocusOut>", lambda _event: self.apply_trigger_settings())
         trigger_guard_entry.bind("<Return>", lambda _event: self.apply_trigger_settings())
         trigger_guard_entry.bind("<FocusOut>", lambda _event: self.apply_trigger_settings())
-        self.waveform_more_button = ttk.Button(
-            self.signal_controls,
-            text="Vertical & channel controls ▾",
-            style="Compact.TButton",
-            command=self._toggle_waveform_advanced,
-        )

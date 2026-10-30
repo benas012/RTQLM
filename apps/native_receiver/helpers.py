@@ -38,7 +38,9 @@ def editable_profile_payload(profile: dict[str, Any]) -> dict[str, Any]:
         "simulatorSamplesPerPacket",
         "simulatorSeed",
     )
-    return {key: profile[key] for key in keys}
+    return {key: profile[key] for key in keys} | {
+        key: profile[key] for key in ("acquisitionMode", "captureSamples") if key in profile
+    }
 
 
 def short_error(exc: BaseException, limit: int = 90) -> str:

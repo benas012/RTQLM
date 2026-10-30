@@ -1,5 +1,13 @@
 # Receiver nullifiers and sample-hold acquisition
 
+To send formulas, coefficients and processing settings with engine commands, see
+[command-configurable nullifier processing](nullifier-commands.md). The engine processor runs
+independently of the receiver and uses the same temporal projection and variance implementation.
+For calculation in C on the Red Pitaya ARM CPU, use the
+[native streaming processor](../native/redpitaya_nullifiers/README.md). When enabled for a board,
+the receiver forwards its controls and displays those C results. This backend supports periodic
+and continuous collection; sampled-edge-triggered collection remains on the host backend.
+
 For the three-step **single-mode squeezing** measurement, use **Single-mode preset**
 and follow [the single-mode guide](single-mode-squeezing.md). It includes the
 function-by-function comparison with the supplied lab script, full-trace
@@ -8,7 +16,8 @@ shot-noise calibration, and the 100-mode rolling variance setting.
 The receiver's analysis area contains **Spectrum analyzer** and **Nullifiers** tabs. Nullifiers are
 calculated from both raw acquired channels before waveform rendering, display downsampling, channel
 visibility, offsets or optional display scripts. All received packets are processed even when the
-display refreshes less often. Choose variance across repeated collection windows, as in the paper,
+display refreshes less often on the host backend. The board backend uses a bounded processing
+queue and reports overruns and FPGA loss explicitly; affected windows are discarded. Choose variance across repeated collection windows, as in the paper,
 or a live rolling diagnostic of neighboring modes in the selected measurement basis. The graph
 alone is not an entanglement certificate.
 

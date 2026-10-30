@@ -10,6 +10,11 @@ Both outputs have configurable waveform, frequency, peak amplitude, offset and p
 normalized samples are supported. See [output signals](../../docs/output-signals.md) for the
 stock 3.00-57 DAC backend, stop control, frequency quantization and receiver loopback presets.
 
+Slow external digital signals can be polled through `GET/PUT /api/v1/devices/{deviceId}/trigger`.
+The default requested period is 10 ms, with rising-edge detection on `DIO0_P`. This requires
+the normal scope FPGA; stock streaming firmware lacks live GPIO readback. See the
+[external trigger plan and limitations](../../docs/external-trigger.md).
+
 ## Install and configure
 
 From the repository root, install the runtime and development tools:
