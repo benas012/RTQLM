@@ -9,7 +9,8 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from apps.native_receiver.calibration_ui import CalibrationProgress
-from apps.native_receiver.helpers import set_if_changed
+from apps.native_receiver.constants import FONTS
+from apps.native_receiver.helpers import format_readout, set_if_changed
 from apps.native_receiver.nullifier_acquisition import (
     AcquisitionWindowControls,
     AnalysisControls,
@@ -115,7 +116,6 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
 
         self.frequency_mhz = tk.StringVar()
         self.variance_window_us = tk.StringVar()
-        self.delay_samples = tk.StringVar()
         self.gate_threshold = tk.StringVar()
         self.minimum_samples = tk.StringVar()
         self.history_modes = tk.StringVar()
@@ -125,7 +125,6 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         fields = (
             ("Mode bandwidth (MHz)", self.frequency_mhz),
             ("Variance window (µs)", self.variance_window_us),
-            ("B delay (samples)", self.delay_samples),
             ("Artifact reject |V| (optional)", self.gate_threshold),
             ("Minimum samples/mode", self.minimum_samples),
             ("Maximum modes/window", self.history_modes),
@@ -175,8 +174,9 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         self.analysis = AnalysisControls(acquisition_frame,
                                          sample_rate_provider=self.parent.mode_sample_rate_hz)
         self.mode_width_us = self.analysis.variables["mode_width_us"]
-        self.mode_shape.trace_add("write", lambda *_args:
-                                  self.analysis.set_mode_shape(self.mode_shape.get()))
+        self.mode_shape.trace_add(
+            "write", lambda *_args: self.analysis.set_mode_shape(self.mode_shape.get()),
+        )
         self.analysis.pack(fill="x", pady=(3, 0))
         ttk.Label(
             acquisition_frame,
@@ -204,6 +204,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         mode_frame = ttk.LabelFrame(editors, text="Explicit mode template (JSON; [] = analytic)")
         self.mode_text = tk.Text(
             mode_frame,
+            font=FONTS["mono"],
             height=6,
             bg=self.palette["bg_deep"],
             fg=self.palette["text"],
@@ -218,6 +219,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         )
         self.nullifier_text = tk.Text(
             nullifier_frame,
+            font=FONTS["mono"],
             height=6,
             bg=self.palette["bg_deep"],
             fg=self.palette["text"],
@@ -248,8 +250,9 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         ttk.Label(footer, textvariable=self.status, wraplength=600).grid(
             row=0, column=0, columnspan=2, sticky="w"
         )
-        ttk.Label(footer, textvariable=self.readout, wraplength=840).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(4, 8)
+        ttk.Label(footer, textvariable=self.readout, style="Numeric.Muted.TLabel",
+                  width=1, anchor="w", wraplength=840).grid(
+            row=1, column=0, columnspan=4, sticky="ew", pady=(4, 8)
         )
         ttk.Combobox(
             footer, textvariable=self.plot_choice, values=PLOT_CHOICES, state="readonly", width=15
@@ -310,7 +313,6 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         self.mode_width_us.set(f"{config.mode_width_seconds * 1e6:g}")
         self.frequency_mhz.set(f"{config.measurement_frequency_hz / 1e6:g}")
         self.variance_window_us.set(f"{config.variance_window_seconds * 1e6:g}")
-        self.delay_samples.set(str(config.channel_b_delay_samples))
         self.gate_threshold.set(
             "" if config.gate_absolute_threshold is None else f"{config.gate_absolute_threshold:g}"
         )
@@ -333,7 +335,6 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
             {
                 "measurementFrequencyHz": float(self.frequency_mhz.get()) * 1e6,
                 "varianceWindowSeconds": float(self.variance_window_us.get()) * 1e-6,
-                "channelBDelaySamples": int(self.delay_samples.get()),
                 "gateAbsoluteThreshold": None if not gate else float(gate),
                 "minSamplesPerMode": int(self.minimum_samples.get()),
                 "historyModes": int(self.history_modes.get()),
@@ -365,6 +366,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
                 mode_width_seconds=current.mode_width_seconds,
                 mode_samples=None,
                 mode_shape=current.mode_shape,
+                mode_expression=current.mode_expression,
                 min_samples_per_mode=current.min_samples_per_mode,
                 measurement_frequency_hz=current.measurement_frequency_hz,
                 explicit_mode_template=current.explicit_mode_template,
@@ -408,7 +410,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         try:
             coefficients = self.parent.finish_cluster_calibration()
             channels = ", ".join(
-                f"{'CH1' if channel == 'a' else 'CH2'} x {value:.5g}"
+                f"{'CH1' if channel == 'a' else 'CH2'} x {format_readout(value, decimals=5)}"
                 for channel, value in coefficients.items()
             )
             self.status.set(f"Calibration complete: {channels}")

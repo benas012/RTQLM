@@ -4,7 +4,7 @@ from apps.native_receiver.gpio_input import input_readout
 
 
 @pytest.mark.parametrize("state,level,text", [
-    ("watching", 0, "LOW · 0"),
+    ("watching", 0, "LOW  · 0"),
     ("watching", 1, "HIGH · 1"),
     ("watching", None, "—"),
     ("watching", True, "—"),

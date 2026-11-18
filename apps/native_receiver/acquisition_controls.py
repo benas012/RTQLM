@@ -103,6 +103,7 @@ class AcquisitionControlsMixin:
             body["blockSizeBytes"] = block_size
             # This sidebar selects the raw continuous-stream acquisition settings.
             body["acquisitionMode"] = "streaming"
+            body["bufferedProcessing"] = "arm"
 
             if self._is_stream_active(runtime_state):
                 raise ApiError(

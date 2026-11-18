@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifndef NF_BUFFERED_WORKER
+#include <sys/resource.h>
+#endif
 
 #define MAX_LINE (1024 * 1024)
 volatile sig_atomic_t nf_stop_requested = 0;
@@ -17,6 +20,20 @@ static bool replay = false;
 static double monotonic_ms(void) {
     struct timespec now; clock_gettime(CLOCK_MONOTONIC, &now);
     return (double)now.tv_sec * 1000 + (double)now.tv_nsec / 1e6;
+}
+/* Reuse the serialized response storage. PrintUnformatted grows and then shrinks
+ * a fresh allocation on every reply, fragmenting the ARM process heap. 64 MiB
+ * exceeds the maximum configured rows/history/template JSON representation. */
+static char *serialize_reply(const cJSON *reply, char **buffer, size_t *capacity) {
+    for (;;) {
+        if (*capacity && cJSON_PrintPreallocated((cJSON *)reply, *buffer, (int)*capacity, false))
+            return *buffer;
+        if (*capacity >= 64u * 1024u * 1024u) return NULL;
+        size_t next = *capacity ? *capacity * 2 : 16384;
+        char *grown = realloc(*buffer, next);
+        if (!grown) return NULL;
+        *buffer = grown; *capacity = next;
+    }
 }
 pthread_mutex_t nf_processor_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -91,12 +108,14 @@ static int formulas(const cJSON *array, nf_config *config, char *error) {
 }
 
 static int parse_config(const cJSON *object, nf_config *c, char *error) {
-    const char *allowed = "|decimation||captureSamples||historyModes||modeSamples||minSamplesPerMode|"
+    const char *allowed = "|decimation||captureSamples||measurementSamples||historyModes||modeSamples||minSamplesPerMode|"
         "|modeOversample||varianceWindowModes||collectionEndGuardSamples||channelBDelaySamples|"
         "|modeWidthSeconds||measurementFrequencyHz||varianceWindowSeconds||collectionGuardSeconds|"
         "|triggerTimeoutSeconds||triggerLevelVolts||gateAbsoluteThreshold||modeShape||varianceEstimator|"
         "|calibrationEstimator||triggerSource||measurementBasis||explicitModeTemplate||nullifiers|"
-        "|windowMode||lockSeconds||collectSeconds||requireFullVarianceWindow|";
+        "|sampledModeTemplates|"
+        "|windowMode||lockSeconds||collectSeconds||requireFullVarianceWindow|"
+        "|acquisitionGatePin||acquisitionGatePollUs||rawReadout|";
     if (keys(object, allowed, error) || !cJSON_GetArraySize(object))
         return fail(error, "configure requires a nonempty object with supported settings");
     const cJSON *item;
@@ -109,7 +128,14 @@ static int parse_config(const cJSON *object, nf_config *c, char *error) {
 #define STRING_SETTING(name, member) if (!strcmp(key, name)) { \
     if (string(item, c->member, sizeof(c->member), error)) { return -1; } continue; }
         UINT_SETTING("decimation", decimation, 65536)
-        UINT_SETTING("captureSamples", capture_samples, 4194304)
+        UINT_SETTING("acquisitionGatePollUs", acquisition_gate_poll_us, 1000000)
+        if (!strcmp(key, "acquisitionGatePin") && cJSON_IsNull(item)) {
+            c->acquisition_gate_pin[0] = 0; continue;
+        }
+        STRING_SETTING("acquisitionGatePin", acquisition_gate_pin)
+        STRING_SETTING("rawReadout", raw_readout)
+        UINT_SETTING("captureSamples", capture_samples, NF_MAX_CAPTURE_SAMPLES)
+        UINT_SETTING("measurementSamples", measurement_samples, NF_MAX_CAPTURE_SAMPLES)
         UINT_SETTING("historyModes", history_modes, NF_MAX_HISTORY)
         if (!strcmp(key, "modeSamples") && cJSON_IsNull(item)) { c->mode_samples = 0; continue; }
         UINT_SETTING("modeSamples", mode_samples, NF_MAX_TEMPLATE)
@@ -150,6 +176,22 @@ static int parse_config(const cJSON *object, nf_config *c, char *error) {
             const cJSON *coefficient;
             cJSON_ArrayForEach(coefficient, item)
                 if (number(coefficient, -1e100, 1e100, &c->explicit_template[c->template_count++], error)) return -1;
+        } else if (!strcmp(key, "sampledModeTemplates")) {
+            if (!cJSON_IsArray(item) || cJSON_GetArraySize(item) > 2)
+                return fail(error, "sampledModeTemplates must contain at most two coefficient arrays");
+            memset(c->sampled_counts, 0, sizeof(c->sampled_counts));
+            const cJSON *array;
+            unsigned index = 0;
+            cJSON_ArrayForEach(array, item) {
+                int count = cJSON_GetArraySize(array);
+                if (!cJSON_IsArray(array) || count < 2 || count > NF_MAX_TEMPLATE)
+                    return fail(error, "sampled template must contain 2 to 4096 coefficients");
+                const cJSON *coefficient;
+                cJSON_ArrayForEach(coefficient, array)
+                    if (number(coefficient, -1e100, 1e100,
+                               &c->sampled_templates[index][c->sampled_counts[index]++], error)) return -1;
+                index++;
+            }
         } else if (!strcmp(key, "nullifiers") && formulas(item, c, error)) return -1;
 #undef UINT_SETTING
 #undef DOUBLE_SETTING
@@ -200,10 +242,16 @@ static cJSON *status_reply(const nf_processor *p) {
     cJSON_AddBoolToObject(reply, "calibrated", p->calibrated);
     cJSON_AddBoolToObject(reply, "calibrating", p->calibrating);
     cJSON_AddBoolToObject(reply, "hasResult", p->has_result);
+    cJSON_AddStringToObject(reply, "inputUnits", p->raw_counts ? "adcCounts" : "volts");
     cJSON_AddNumberToObject(reply, "captures", (double)p->captures);
+    cJSON_AddNumberToObject(reply, "capturedModes", (double)p->captured_modes);
+    cJSON_AddNumberToObject(reply, "includedModes", (double)p->included_modes);
+    cJSON_AddNumberToObject(reply, "excludedModes", (double)p->excluded_modes);
+    if (p->tagged_capture) cJSON_AddStringToObject(reply, "e1MeasurementLevel", "low");
     cJSON_AddNumberToObject(reply, "sampleRateHz", p->sample_rate);
     cJSON_AddNumberToObject(reply, "modeSamples", p->mode_size);
-    cJSON_AddNumberToObject(reply, "modePeriodSeconds", p->sample_rate ? p->mode_size / p->sample_rate : 0);
+    cJSON_AddNumberToObject(reply, "modeSamplesMax", p->mode_size_max);
+    cJSON_AddNumberToObject(reply, "modePeriodSeconds", p->sample_rate ? p->mode_step / p->sample_rate : 0);
     cJSON_AddBoolToObject(reply, "prefixTruncated", p->truncated);
     cJSON_AddItemToObject(reply, "stream", nf_stream_status());
     cJSON *counts = cJSON_AddObjectToObject(reply, "calibrationModeCounts");
@@ -219,12 +267,17 @@ static cJSON *status_reply(const nf_processor *p) {
 #define READ_NUMBER(key, member) cJSON_AddNumberToObject(config, key, c->member)
 #define READ_STRING(key, member) cJSON_AddStringToObject(config, key, c->member)
     READ_NUMBER("decimation", decimation); READ_NUMBER("captureSamples", capture_samples);
+    READ_NUMBER("measurementSamples", measurement_samples);
     READ_NUMBER("historyModes", history_modes); READ_NUMBER("minSamplesPerMode", min_samples);
     READ_NUMBER("modeOversample", oversample); READ_NUMBER("channelBDelaySamples", b_delay);
     READ_NUMBER("modeWidthSeconds", mode_width); READ_NUMBER("measurementFrequencyHz", frequency);
     READ_NUMBER("varianceWindowSeconds", variance_seconds); READ_NUMBER("collectionGuardSeconds", guard_seconds);
     READ_NUMBER("collectionEndGuardSamples", end_guard); READ_NUMBER("triggerTimeoutSeconds", timeout_seconds);
     READ_NUMBER("triggerLevelVolts", trigger_level);
+    if (c->acquisition_gate_pin[0]) READ_STRING("acquisitionGatePin", acquisition_gate_pin);
+    else cJSON_AddNullToObject(config, "acquisitionGatePin");
+    READ_NUMBER("acquisitionGatePollUs", acquisition_gate_poll_us);
+    READ_STRING("rawReadout", raw_readout);
     READ_STRING("modeShape", shape); READ_STRING("varianceEstimator", estimator);
     READ_STRING("calibrationEstimator", calibration_estimator); READ_STRING("triggerSource", trigger);
     READ_STRING("measurementBasis", basis);
@@ -237,6 +290,10 @@ static cJSON *status_reply(const nf_processor *p) {
     if (c->reject_threshold) READ_NUMBER("gateAbsoluteThreshold", reject_threshold);
     else cJSON_AddNullToObject(config, "gateAbsoluteThreshold");
     cJSON_AddItemToObject(config, "explicitModeTemplate", numbers(c->explicit_template, c->template_count));
+    cJSON *sampled = cJSON_CreateArray();
+    for (unsigned i = 0; i < 2 && c->sampled_counts[i]; ++i)
+        cJSON_AddItemToArray(sampled, numbers(c->sampled_templates[i], c->sampled_counts[i]));
+    cJSON_AddItemToObject(config, "sampledModeTemplates", sampled);
     cJSON *rows = cJSON_AddArrayToObject(config, "nullifiers");
     for (unsigned i = 0; i < c->row_count; ++i) {
         const nf_row *row = &c->rows[i]; cJSON *object = cJSON_CreateObject();
@@ -256,26 +313,43 @@ static cJSON *status_reply(const nf_processor *p) {
     return reply;
 }
 
-static cJSON *latest_reply(const nf_processor *p, unsigned max_points) {
+static cJSON *gate_numbers(const nf_processor *p, const double *values, size_t count, size_t stride) {
+    if (!p->tagged_capture || !p->excluded_modes || stride == 1)
+        return stepped_numbers(values, count, stride);
+    cJSON *array = cJSON_CreateArray();
+    for (size_t i = 0; i < count; i += stride) {
+        bool gap = false;
+        size_t end = i + stride < count ? i + stride : count;
+        for (size_t k = i; k < end; ++k) if (isnan(values[k])) { gap = true; break; }
+        cJSON_AddItemToArray(array, gap || !isfinite(values[i]) ? cJSON_CreateNull() :
+                                                                   cJSON_CreateNumber(values[i]));
+    }
+    return array;
+}
+
+static cJSON *result_reply(const nf_processor *p, unsigned max_points, bool variances_only) {
     cJSON *reply = status_reply(p);
     size_t longest = p->quadrature_count;
     for (unsigned i = 0; i < p->config.row_count; ++i)
         if (p->rows[i].size > longest) longest = p->rows[i].size;
     size_t stride = max_points && longest > max_points ? (longest + max_points - 1) / max_points : 1;
     cJSON_AddNumberToObject(reply, "displayStride", (double)stride);
-    cJSON *values = cJSON_AddObjectToObject(reply, "nullifiers");
+    cJSON *values = variances_only ? NULL : cJSON_AddObjectToObject(reply, "nullifiers");
     cJSON *variances = cJSON_AddObjectToObject(reply, "variances");
     cJSON *db = cJSON_AddObjectToObject(reply, "squeezingDb");
     cJSON *counts = cJSON_AddObjectToObject(reply, "varianceCounts");
     cJSON *starts = cJSON_AddObjectToObject(reply, "indexStarts");
-    cJSON *quadratures = cJSON_AddObjectToObject(reply, "quadratures");
-    cJSON_AddItemToObject(quadratures, "a", stepped_numbers(p->quadratures[0], p->quadrature_count, stride));
-    cJSON_AddItemToObject(quadratures, "b", stepped_numbers(p->quadratures[1], p->quadrature_count, stride));
+    if (!variances_only) {
+        cJSON *quadratures = cJSON_AddObjectToObject(reply, "quadratures");
+        cJSON_AddItemToObject(quadratures, "a", gate_numbers(p, p->quadratures[0], p->quadrature_count, stride));
+        cJSON_AddItemToObject(quadratures, "b", gate_numbers(p, p->quadratures[1], p->quadrature_count, stride));
+    }
+    cJSON_AddStringToObject(reply, "resultFields", variances_only ? "variances" : "all");
     for (unsigned i = 0; i < p->config.row_count; ++i) {
         const nf_row_state *r = &p->rows[i]; const char *name = p->config.rows[i].name;
-        cJSON_AddItemToObject(values, name, stepped_numbers(r->values, r->size, stride));
-        cJSON_AddItemToObject(variances, name, stepped_numbers(r->variance, r->size, stride));
-        if (p->calibrated) cJSON_AddItemToObject(db, name, stepped_numbers(r->db, r->size, stride));
+        if (values) cJSON_AddItemToObject(values, name, gate_numbers(p, r->values, r->size, stride));
+        cJSON_AddItemToObject(variances, name, gate_numbers(p, r->variance, r->size, stride));
+        if (p->calibrated) cJSON_AddItemToObject(db, name, gate_numbers(p, r->db, r->size, stride));
         cJSON *array = cJSON_AddArrayToObject(counts, name);
         for (size_t j = 0; j < r->size; j += stride) cJSON_AddItemToArray(array, cJSON_CreateNumber((double)r->counts[j]));
         cJSON_AddNumberToObject(starts, name, p->config.rows[i].start);
@@ -283,10 +357,14 @@ static cJSON *latest_reply(const nf_processor *p, unsigned max_points) {
     return reply;
 }
 
+#ifndef NF_BUFFERED_WORKER
 static nf_processor *copy_result(const nf_processor *p) {
     nf_processor *copy = malloc(sizeof(*copy));
     if (!copy) return NULL;
     *copy = *p;
+    /* Spares belong to the live projector, never to a display snapshot. */
+    copy->spare_quadratures[0] = copy->spare_quadratures[1] = NULL;
+    copy->spare_capacity = 0;
     memset(copy->rows, 0, sizeof(copy->rows));
     copy->quadratures[0] = copy->quadratures[1] = NULL;
     for (unsigned channel = 0; channel < 2; ++channel) if (p->quadrature_count) {
@@ -310,6 +388,7 @@ static nf_processor *copy_result(const nf_processor *p) {
 failed:
     nf_destroy(copy); free(copy); return NULL;
 }
+#endif
 
 static int replay_samples(const cJSON *samples, float **a, float **b, size_t *count, char *error) {
     if (keys(samples, "|a||b|", error)) return -1;
@@ -332,6 +411,23 @@ static int replay_samples(const cJSON *samples, float **a, float **b, size_t *co
     return 0;
 }
 
+static void acquisition_gate_timing(cJSON *timing, nf_acquire_timing acquired) {
+    cJSON_AddNumberToObject(timing, "gateWait", acquired.gate_wait_ms);
+    cJSON_AddNumberToObject(timing, "gateCheck", acquired.gate_check_ms);
+    cJSON_AddNumberToObject(timing, "gateChecks", (double)acquired.gate_checks);
+    cJSON_AddNumberToObject(timing, "gateMaxInterval", acquired.gate_max_interval_ms);
+    cJSON_AddNumberToObject(timing, "gateIntervalCount", (double)acquired.gate_intervals);
+    cJSON_AddNumberToObject(timing, "gateMeanInterval", acquired.gate_intervals ?
+                           acquired.gate_interval_sum_ms / acquired.gate_intervals : 0);
+    cJSON *histogram = cJSON_AddArrayToObject(timing, "gateIntervalHistogram");
+    for (unsigned i = 0; i < 32; ++i)
+        cJSON_AddItemToArray(histogram, cJSON_CreateNumber((double)acquired.gate_interval_histogram[i]));
+    cJSON_AddNumberToObject(timing, "sampleDuration", acquired.sample_duration_ms);
+    cJSON_AddNumberToObject(timing, "startInterval", acquired.start_interval_ms);
+    cJSON_AddNumberToObject(timing, "rawCopy", acquired.raw_copy_ms);
+    cJSON_AddNumberToObject(timing, "rawCopyBytes", (double)acquired.raw_copy_bytes);
+}
+
 static cJSON *execute(nf_processor *p, const cJSON *request, char *error) {
     const cJSON *cmd = cJSON_GetObjectItemCaseSensitive(request, "command");
     if (!cJSON_IsString(cmd)) { fail(error, "command must be a string"); return NULL; }
@@ -339,11 +435,17 @@ static cJSON *execute(nf_processor *p, const cJSON *request, char *error) {
     const char *allowed = !strcmp(command, "configure") ? "|command||config|" :
         !strcmp(command, "finish_calibration") ? "|command||minimumModes|" :
         !strcmp(command, "start_stream") ? "|command||port||channelMask|" :
-        !strcmp(command, "latest") ? "|command||maxPoints|" :
+        !strcmp(command, "latest") ? "|command||maxPoints||resultFields|" :
         !strcmp(command, "output") ? "|command||channel||enabled||waveform||frequency||amplitude||offset||phase|" :
-        !strcmp(command, "capture") ? (replay ? "|command||samples||previewPoints||maxPoints|" :
-                                      "|command||previewPoints||maxPoints|") : "|command|";
+        !strcmp(command, "capture") ? (replay ? "|command||samples||previewPoints||maxPoints||resultFields|" :
+                                      "|command||previewPoints||maxPoints||resultFields|") : "|command|";
     if (keys(request, allowed, error)) return NULL;
+    const cJSON *fields = cJSON_GetObjectItemCaseSensitive(request, "resultFields");
+    if (fields && (!cJSON_IsString(fields) ||
+                  (strcmp(fields->valuestring, "all") && strcmp(fields->valuestring, "variances")))) {
+        fail(error, "resultFields must be all or variances"); return NULL;
+    }
+    bool variances_only = fields && !strcmp(fields->valuestring, "variances");
     if (!strcmp(command, "configure")) {
         nf_config *candidate = malloc(sizeof(*candidate));
         if (!candidate) { fail(error, "cannot allocate configuration"); return NULL; }
@@ -382,36 +484,86 @@ static cJSON *execute(nf_processor *p, const cJSON *request, char *error) {
         unsigned preview_points = 0, max_points = 0;
         const cJSON *preview_limit = cJSON_GetObjectItemCaseSensitive(request, "previewPoints");
         const cJSON *display_limit = cJSON_GetObjectItemCaseSensitive(request, "maxPoints");
+        if (variances_only && preview_limit) {
+            fail(error, "variance-only results cannot include a waveform preview"); return NULL;
+        }
         if ((preview_limit && integer(preview_limit, 16, 4096, &preview_points, error)) ||
             (display_limit && integer(display_limit, 16, NF_MAX_HISTORY, &max_points, error))) return NULL;
         if (nf_stream_running()) { fail(error, "stop streaming before a burst capture"); return NULL; }
         if (!p->enabled) { fail(error, "configure before capture"); return NULL; }
         float *a = NULL, *b = NULL; size_t count = p->config.capture_samples;
+        double *q[2] = {NULL, NULL}; size_t modes = 0;
         int result = replay ? replay_samples(cJSON_GetObjectItemCaseSensitive(request, "samples"), &a, &b, &count, error) :
-                              nf_acquire(&p->config, &a, &b, error);
+                              nf_acquire_modes(p, preview_points, &a, &b, q, &modes, error);
+        bool input_rejected = result != 0;
         double processing_begin = monotonic_ms();
-        if (!result) result = nf_process(p, a, b, count, error);
+        if (!result) {
+            result = replay ? nf_process(p, a, b, count, error) : nf_process_modes(p, q, modes, error);
+            q[0] = q[1] = NULL;
+        }
         double format_begin = monotonic_ms();
-        cJSON *reply = result ? NULL : (p->calibrating ? status_reply(p) : latest_reply(p, max_points));
+        cJSON *reply = result ? NULL : (p->calibrating ? status_reply(p) : result_reply(p, max_points, variances_only));
         if (reply && preview_points) {
             cJSON *preview = cJSON_AddObjectToObject(reply, "preview");
             cJSON *rails[2] = {cJSON_AddArrayToObject(preview, "a"), cJSON_AddArrayToObject(preview, "b")};
+            unsigned stride = !replay ? nf_acquire_last_timing().preview_stride : 0;
+            if (stride) {
+                if (p->config.measurement_samples) count = p->config.measurement_samples;
+                cJSON_AddNumberToObject(preview, "sampleStride", stride);
+            }
             if (preview_points > count) preview_points = (unsigned)count;
             for (unsigned i = 0; i < preview_points; ++i) {
                 cJSON_AddItemToArray(rails[0], cJSON_CreateNumber(a[i]));
                 cJSON_AddItemToArray(rails[1], cJSON_CreateNumber(b[i]));
             }
         }
-        free(a); free(b);
-        if (result) { nf_clear_results(p); return NULL; }
+        free(a); free(b); free(q[0]); free(q[1]);
+        if (result) {
+            // A rejected acquisition contributes no observation and must not erase
+            // earlier lab/ensemble statistics. Processing failures may be partial.
+            if (!input_rejected) nf_clear_results(p);
+            cJSON *failed = cJSON_CreateObject();
+            cJSON_AddBoolToObject(failed, "ok", false);
+            cJSON_AddStringToObject(failed, "error", error[0] ? error : "capture failed");
+            if (!replay) {
+                nf_acquire_timing acquired = nf_acquire_last_timing();
+                cJSON *timing = cJSON_AddObjectToObject(failed, "captureTimingMs");
+                acquisition_gate_timing(timing, acquired);
+                cJSON_AddNumberToObject(timing, "cleanup", acquired.cleanup_ms);
+                cJSON_AddNumberToObject(timing, "acquisitionTotal", acquired.total_ms);
+            }
+            return failed;
+        }
         if (reply) {
             nf_acquire_timing acquired = nf_acquire_last_timing();
+            nf_process_timing processed = nf_process_last_timing(p);
             cJSON *timing = cJSON_AddObjectToObject(reply, "captureTimingMs");
             cJSON_AddNumberToObject(timing, "setup", acquired.setup_ms);
+            acquisition_gate_timing(timing, acquired);
             cJSON_AddNumberToObject(timing, "sampleWait", acquired.wait_ms);
             cJSON_AddNumberToObject(timing, "read", acquired.read_ms);
+            cJSON_AddNumberToObject(timing, "readPointers", acquired.read_pointers_ms);
+            cJSON_AddNumberToObject(timing, "readChannel1", acquired.channel_read_ms[0]);
+            cJSON_AddNumberToObject(timing, "readChannel2", acquired.channel_read_ms[1]);
+            cJSON_AddNumberToObject(timing, "readParameters", acquired.read_parameters_ms);
+            cJSON_AddNumberToObject(timing, "readTable", acquired.read_table_ms);
+            cJSON_AddNumberToObject(timing, "readRegions", acquired.read_regions_ms);
+            cJSON_AddNumberToObject(timing, "readConvert", acquired.read_convert_ms);
+            cJSON_AddNumberToObject(timing, "readVerify", acquired.read_verify_ms);
+            cJSON_AddNumberToObject(timing, "readFallback", acquired.read_fallback_ms);
+            cJSON_AddNumberToObject(timing, "rawProjection", acquired.raw_projection_ms);
+            cJSON_AddBoolToObject(timing, "taggedE1", nf_tagged_readout(p->config.raw_readout, NULL, NULL) && !replay);
             cJSON_AddNumberToObject(timing, "directChannels", acquired.direct_channels);
             cJSON_AddNumberToObject(timing, "processing", format_begin - processing_begin);
+            cJSON_AddNumberToObject(timing, "normalization", processed.normalization_ms);
+            cJSON_AddNumberToObject(timing, "formulas", processed.formulas_ms);
+            cJSON_AddNumberToObject(timing, "rollingVariance", processed.rolling_ms);
+            cJSON_AddNumberToObject(timing, "statistics", processed.statistics_ms);
+            cJSON_AddNumberToObject(timing, "log10Calls", (double)processed.log10_calls);
+            cJSON_AddNumberToObject(timing, "cleanup", acquired.cleanup_ms);
+            cJSON_AddNumberToObject(timing, "acquisitionTotal", acquired.total_ms);
+            cJSON_AddNumberToObject(timing, "postDma", acquired.read_ms + acquired.cleanup_ms +
+                                   format_begin - processing_begin);
             cJSON_AddNumberToObject(timing, "jsonBuild", monotonic_ms() - format_begin);
         }
         return reply;
@@ -420,7 +572,7 @@ static cJSON *execute(nf_processor *p, const cJSON *request, char *error) {
         const cJSON *limit = cJSON_GetObjectItemCaseSensitive(request, "maxPoints");
         if (limit && integer(limit, 16, NF_MAX_HISTORY, &max_points, error)) return NULL;
         if (!p->has_result) { fail(error, "no processed capture available"); return NULL; }
-        return latest_reply(p, max_points);
+        return result_reply(p, max_points, variances_only);
     } else if (!strcmp(command, "output")) {
         unsigned channel, waveform;
         double frequency, amplitude, offset, phase;
@@ -440,6 +592,7 @@ static cJSON *execute(nf_processor *p, const cJSON *request, char *error) {
     return status_reply(p);
 }
 
+#ifndef NF_BUFFERED_WORKER
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--replay")) replay = true;
     else if (argc != 1) { fprintf(stderr, "usage: %s [--replay]\n", argv[0]); return 2; }
@@ -449,6 +602,7 @@ int main(int argc, char **argv) {
     nf_processor *processor = calloc(1, sizeof(*processor)); char *line = malloc(MAX_LINE + 1);
     if (!processor || !line) { free(processor); free(line); return 2; }
     nf_defaults(&processor->config); nf_clear_calibration(processor);
+    char *serialized = NULL; size_t serialized_capacity = 0;
     while (!nf_stop_requested) {
         size_t n = 0; bool oversized = false, nul = false; int ch;
         while ((ch = fgetc(stdin)) != EOF && ch != '\n') {
@@ -484,14 +638,31 @@ int main(int argc, char **argv) {
             reply = cJSON_CreateObject(); cJSON_AddBoolToObject(reply, "ok", false);
             cJSON_AddStringToObject(reply, "error", error[0] ? error : "command failed");
         }
-        char *text = cJSON_PrintUnformatted(reply);
+        double serialize_begin = monotonic_ms();
+        char *text = serialize_reply(reply, &serialized, &serialized_capacity);
         if (!text) { cJSON_Delete(request); cJSON_Delete(reply); break; }
-        puts(text); fflush(stdout); free(text); cJSON_Delete(request); cJSON_Delete(reply);
+        double serialize_end = monotonic_ms();
+        size_t serialized_bytes = strlen(text) + 1;
+        puts(text); fflush(stdout);
+        double write_end = monotonic_ms();
+        // Opt-in side channel avoids self-referential timings in the measured JSON.
+        if (getenv("NF_PROFILE_IO")) {
+            struct rusage usage; getrusage(RUSAGE_SELF, &usage);
+            double cpu_seconds = usage.ru_utime.tv_sec + usage.ru_stime.tv_sec +
+                (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) * 1e-6;
+            fprintf(stderr, "{\"serializeMs\":%.9g,\"stdoutWriteMs\":%.9g,\"bytes\":%zu,"
+                    "\"boardCpuSeconds\":%.9g,\"rssHighWaterKiB\":%ld}\n",
+                    serialize_end - serialize_begin, write_end - serialize_end, serialized_bytes,
+                    cpu_seconds, usage.ru_maxrss);
+        }
+        cJSON_Delete(request); cJSON_Delete(reply);
         if (ch == EOF) break;
     }
     nf_stream_stop();
     char shutdown_error[NF_ERROR_SIZE] = {0};
     int shutdown_result = nf_acquire_shutdown(shutdown_error);
     if (shutdown_result) fprintf(stderr, "%s\n", shutdown_error);
-    nf_destroy(processor); free(processor); free(line); return shutdown_result ? 1 : 0;
+    nf_destroy(processor); free(processor); free(line); free(serialized);
+    return shutdown_result ? 1 : 0;
 }
+#endif

@@ -22,4 +22,5 @@ def native_result(payload: dict[str, Any]) -> ClusterProcessingResult:
             name: np.asarray(array, dtype=np.int64 if key == "variance_counts" else np.float64)
             for name, array in values.get(key, {}).items()
         }
+    values["tagged_e1"] = bool((payload.get("captureTimingMs") or {}).get("taggedE1"))
     return ClusterProcessingResult(**values)

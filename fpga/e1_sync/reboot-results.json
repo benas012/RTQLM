@@ -1,0 +1,133 @@
+{
+  "bootIdBefore": "53a1079e-d328-4069-8187-99fdc5416aa0",
+  "bootIdAfter": "353f4e50-d33b-4393-93f8-fec031e271e1",
+  "stateOnBoot": [
+    {
+      "channel": 1,
+      "enabled": true,
+      "frequency": 1000,
+      "amplitude": 1,
+      "offset": 0,
+      "phase": 0,
+      "waveform": 0
+    },
+    {
+      "channel": 2,
+      "enabled": true,
+      "frequency": 1000,
+      "amplitude": 1,
+      "offset": 0,
+      "phase": 0,
+      "waveform": 0
+    },
+    {
+      "e1Pin3State": 1,
+      "e1Pin3Direction": 0
+    },
+    {
+      "fpgaSignature": 1162948865,
+      "e1Control": 1280
+    }
+  ],
+  "installedSha256": "52d4a29b6d73f402d2cacd2609e483524c84c5f0e7e34cf976a9f814d751f2d6  /opt/redpitaya/fpga/z10_125_pro_v2/v0.94/fpga.bin\n3b2d39530f5308c6f9d95d80d0c1d9581d9ab503f02e3ae32101dc2672c42a1a  /opt/redpitaya/fpga/z10_125_pro_v2/v0.94/fpga.bit\n",
+  "diagnostic": {
+    "ok": true,
+    "format": "rtqlm-e1-tagged-v1",
+    "count": 6250000,
+    "storedCount": 6250048,
+    "sampleRateHz": 125000000,
+    "channels": [
+      "CH1",
+      "CH2",
+      "E1_PIN3"
+    ],
+    "payloadBytes": 25000000,
+    "payloadLayout": "planar-u16-le-tagged",
+    "diagnostic": true,
+    "adcUnits": "uncalibrated-signed-14-bit-counts",
+    "e1DelayTap": 5,
+    "physicalTimingOffsetVerified": false,
+    "triggerPositions": [
+      22761,
+      22761
+    ],
+    "acquireAndReadMs": 339.775024,
+    "acquireMs": 50.579317,
+    "readAndCopyMs": 189.302636,
+    "integrityCheckMs": 99.890353,
+    "captureAndTransferMs": 768.8927000272088,
+    "hostDecodeMs": 198.02300003357232,
+    "totalCallMs": 4277.192500012461
+  },
+  "realCapture": {
+    "ok": true,
+    "format": "rtqlm-e1-tagged-v1",
+    "count": 6250000,
+    "storedCount": 6250048,
+    "sampleRateHz": 125000000,
+    "channels": [
+      "CH1",
+      "CH2",
+      "E1_PIN3"
+    ],
+    "payloadBytes": 25000000,
+    "payloadLayout": "planar-u16-le-tagged",
+    "diagnostic": false,
+    "adcUnits": "uncalibrated-signed-14-bit-counts",
+    "e1DelayTap": 5,
+    "physicalTimingOffsetVerified": false,
+    "triggerPositions": [
+      7539,
+      7539
+    ],
+    "acquireAndReadMs": 359.705668,
+    "acquireMs": 50.281177,
+    "readAndCopyMs": 205.348754,
+    "integrityCheckMs": 104.073163,
+    "captureAndTransferMs": 830.5163999903016,
+    "hostDecodeMs": 102.2406000411138,
+    "totalCallMs": 4196.422099950723,
+    "e1High": 6250000,
+    "e1Low": 0,
+    "CH1Range": [
+      -7210,
+      7208
+    ],
+    "CH1ApproxFrequencyHz": 1000.0,
+    "CH2Range": [
+      -7195,
+      7213
+    ],
+    "CH2ApproxFrequencyHz": 1000.0
+  },
+  "finalState": [
+    {
+      "channel": 1,
+      "enabled": true,
+      "frequency": 1000,
+      "amplitude": 1,
+      "offset": 0,
+      "phase": 0,
+      "waveform": 0
+    },
+    {
+      "channel": 2,
+      "enabled": true,
+      "frequency": 1000,
+      "amplitude": 1,
+      "offset": 0,
+      "phase": 0,
+      "waveform": 0
+    },
+    {
+      "e1Pin3State": 1,
+      "e1Pin3Direction": 0
+    },
+    {
+      "fpgaSignature": 1162948865,
+      "e1Control": 1280
+    }
+  ],
+  "bootMountOptions": "ro,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro",
+  "passed": true
+}

@@ -17,7 +17,6 @@ from apps.native_receiver.constants import (
     DEFAULT_SIGNAL_SCRIPT,
     DEFAULT_TIME_SPAN,
     DIMENSIONS,
-    FONTS,
     TRIGGER_HYSTERESIS_VOLTS,
     UI_FRAME_INTERVAL_MS,
 )
@@ -90,7 +89,6 @@ class ReceiverApp(
 
     def _initialize_ui_state(self) -> None:
         self.ui_colors = COLORS
-        self.ui_fonts = FONTS
         self.api_base = tk.StringVar(value=self.settings.api_base)
         self.launch_engine_on_start = tk.BooleanVar(value=self.settings.launch_engine_on_start)
         self.status = tk.StringVar(value="disconnected")
@@ -126,7 +124,7 @@ class ReceiverApp(
         self.pause_label = tk.StringVar(value="Pause")
         self.display_detail = tk.StringVar(value="Live")
         self.diagnostics_expanded = tk.BooleanVar(value=False)
-        self.device_empty_message = tk.StringVar(value="No Red Pitayas registered")
+        self.show_live_signal = tk.BooleanVar(value=False)
         self.connection_summary = tk.StringVar(value="No device selected")
         self.cursor_status = tk.StringVar(value="Cursor off")
         self.trigger_enabled = tk.BooleanVar(value=False)

@@ -1,0 +1,11 @@
+{
+  "restoredStock": false,
+  "model": "z10_125_pro_v2",
+  "sourceCommit": "c3fc4f6ebebf9b24f008ecb606eb7a3a23f62422",
+  "installed": {
+    "fpga.bin": "52d4a29b6d73f402d2cacd2609e483524c84c5f0e7e34cf976a9f814d751f2d6",
+    "fpga.bit": "3b2d39530f5308c6f9d95d80d0c1d9581d9ab503f02e3ae32101dc2672c42a1a",
+    "git_info.txt": "8d1a40ee954488a1a194613dd5fb1288575e21e3b5efd18723e137203810ec73"
+  },
+  "stockBackup": "/root/rtqlm-e1-sync/stock-image"
+}

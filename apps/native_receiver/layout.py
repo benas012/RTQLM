@@ -54,6 +54,10 @@ class LayoutMixin:
         menu.add_cascade(label="Signal", menu=signal_menu)
 
         view_menu = tk.Menu(menu, tearoff=False)
+        view_menu.add_checkbutton(
+            label="Show live signal", variable=self.show_live_signal,
+            command=self._update_live_signal_visibility,
+        )
         view_menu.add_command(label="Redraw plots", command=self._redraw_all_grids)
         menu.add_cascade(label="View", menu=view_menu)
 
@@ -152,7 +156,7 @@ class LayoutMixin:
 
     def _constrain_plot_split(self) -> None:
         """Keep both plots usable when the containing window becomes smaller."""
-        if not self.plot_split.winfo_exists():
+        if not self.plot_split.winfo_exists() or len(self.plot_split.panes()) < 2:
             return
         minimum = int(self.plot_split.panecget(self.analysis_surface, "minsize"))
         top = self.plot_split.sash_coord(0)[1]
@@ -163,6 +167,17 @@ class LayoutMixin:
 
     def _on_plot_split_configure(self, _event: Any) -> None:
         self.after_idle(self._constrain_plot_split)
+
+    def _update_live_signal_visibility(self) -> None:
+        panes = tuple(str(pane) for pane in self.plot_split.panes())
+        visible = str(self.waveform_surface) in panes
+        if self.show_live_signal.get() and not visible:
+            self.plot_split.add(self.waveform_surface, before=self.analysis_surface,
+                                minsize=166, stretch="always")
+            self.after_idle(self._redraw_all_grids)
+        elif not self.show_live_signal.get() and visible:
+            self._hide_waveform_controls()
+            self.plot_split.forget(self.waveform_surface)
 
     def _bind_shortcuts(self) -> None:
         self.bind("<Control-r>", lambda event: self._run_shortcut(event, self.refresh_devices))
@@ -383,10 +398,12 @@ class LayoutMixin:
         block_box.grid(row=2, column=1, sticky="ew", pady=(0, 6))
         block_box.bind("<<ComboboxSelected>>", lambda _event: self._update_acquisition_rate())
         ttk.Label(
-            acquisition_panel, textvariable=self.acquisition_rate, style="SidebarMuted.TLabel"
+            acquisition_panel, textvariable=self.acquisition_rate,
+            style="Numeric.SidebarMuted.TLabel"
         ).grid(row=3, column=0, columnspan=2, sticky="w")
         ttk.Label(
-            acquisition_panel, textvariable=self.acquisition_batch, style="SidebarMuted.TLabel"
+            acquisition_panel, textvariable=self.acquisition_batch,
+            style="Numeric.SidebarMuted.TLabel"
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(1, 8))
         low_delay_button = ttk.Button(
             acquisition_panel,
@@ -406,6 +423,10 @@ class LayoutMixin:
             acquisition_panel, text="Apply settings", command=self.apply_acquisition_settings
         )
         self.apply_acquisition_button.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        # Keep the device's configured ADC rate; rate changes are managed by the
+        # selected acquisition workflow rather than the everyday receiver controls.
+        for widget in (decimation_label, decimation_box, low_delay_button, stable_button):
+            widget.grid_remove()
         ToolTip(
             decimation_label,
             "Divides the 125 MHz ADC clock. Lower numbers sample faster and create more data.",
@@ -446,6 +467,7 @@ class LayoutMixin:
         self.plot_split.add(self.analysis_surface, minsize=410, stretch="always")
         self._build_waveform_panel(self.waveform_surface)
         self._build_spectrum_panel(self.analysis_surface)
+        self._update_live_signal_visibility()
         self.plot_split.bind("<Configure>", self._on_plot_split_configure)
         main.bind("<Configure>", self._on_main_configure, add="+")
         self._build_connection_overlay(main)
@@ -507,10 +529,10 @@ class LayoutMixin:
         ttk.Label(self.diagnostics_panel, textvariable=self.status, style="Muted.TLabel",
                    wraplength=800).grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
         ttk.Label(self.diagnostics_panel, textvariable=self.ch1_range,
-                   style="Muted.TLabel").grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(5, 0)
+                   style="Numeric.Muted.TLabel", width=1, anchor="w").grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=(5, 0)
         )
         ttk.Label(self.diagnostics_panel, textvariable=self.ch2_range,
-                   style="Muted.TLabel").grid(
-            row=2, column=2, columnspan=2, sticky="w", pady=(5, 0)
+                   style="Numeric.Muted.TLabel", width=1, anchor="w").grid(
+            row=2, column=2, columnspan=2, sticky="ew", pady=(5, 0)
         )

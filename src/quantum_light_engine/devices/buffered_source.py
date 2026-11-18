@@ -65,17 +65,23 @@ class BufferedCaptureSource(AcquisitionSource):
             reply = await asyncio.to_thread(self.processor.capture_preview)
             if not self.running:
                 break
-            preview = reply["preview"]
+            preview = reply.get("preview")
+            if preview is None:
+                # Variances are exposed by the existing results endpoint. There
+                # are no raw waveform samples to publish in this mode.
+                await asyncio.sleep(0)
+                continue
             channels = [np.ascontiguousarray(np.clip(np.rint(np.asarray(preview[key]) * 8192),
                                                      -32768, 32767), dtype="<i2")
                         for key in ("a", "b")]
+            display_decimation = self.processor.decimation * int(preview.get("sampleStride", 1))
             # Each window has dead time. A fresh stream ID prevents the viewer from
             # joining its preview to the preceding capture or inventing continuity.
             yield RawSampleFrame(
                 stream_id=secrets.randbits(63), sequence=0, source_pack_id=0,
                 captured_at_unix_ns=time.time_ns(), base_rate_hz=125_000_000,
-                decimation=self.processor.decimation,
-                sample_rate_hz=125_000_000 / self.processor.decimation,
+                decimation=display_decimation,
+                sample_rate_hz=125_000_000 / display_decimation,
                 samples_per_channel=len(channels[0]), channel_mask=self.processor.channel_mask,
                 channel_1=channels[0] if self.processor.channel_mask & 1 else None,
                 channel_2=channels[1] if self.processor.channel_mask & 2 else None,

@@ -38,12 +38,18 @@ the receiver selects the lab method explicitly.
 
 `lab_gaussian_linear_cosine` reproduces the script's Gaussian times linear times cosine shape.
 The cosine is **cos(t * meas_freq)**, while the Gaussian uses **2*pi*meas_freq**. This preserves
-the supplied convention. Fine-grid coefficients are normalized before interpolation;
-the interpolated template is not normalized again. Oversampling creates coefficients, not new
-ADC measurements. Template length is **int(mode_width / dt)**: at 125 MS/s it has 38 samples
-(304 ns); at 15.625 MS/s it has 4 samples (256 ns). The graph reports the actual tiled period.
-This compatibility method does not implement a fractional 308 ns optical grid; validate actual
-timing before interpreting long acquisitions.
+the supplied convention. Oversampling creates coefficients, not new ADC measurements.
+Time-based extraction places boundary k at **floor(k * T * Fs)** rather than rounding T once.
+At 125 MS/s, T = 308 ns therefore alternates **38/39 samples** (304/312 ns), averaging 308 ns
+without accumulated rounding drift. Each bin-length template has unit discrete white-noise
+gain. The UI reports both sample counts and the average period. Fixed `modeSamples` or an
+explicit template retain fixed-size bins; the standalone lab-template helper retains its
+fine-grid normalization convention for compatibility.
+
+The bin clock starts at the admitted collection boundary; this does not synchronize that
+boundary to an optical clock. Validate the start time and actual mode shape. A constant input
+offset can produce different quadrature means for the two bin lengths; use a properly balanced
+detector and check the residual DC level. Record a new reference after changing timing/weights.
 
 The lab preset minimum is **4 samples per mode**, configurable in Configure. This permits
 low-rate experiments; it is not a scientific accuracy guarantee. The older paper/API minimum
@@ -109,10 +115,26 @@ is available as an alternative shape, and an explicit discrete template can be s
 templates are normalized so that `sum(f**2)*dt = 1`, then each mode is projected using
 `sum(samples*f)*dt`. This normalization is consistent with the explicit shot-noise calibration.
 
-The actual mode length is an integer number of ADC samples. At 125 MS/s, 247 ns rounds to 31 samples,
-or **248 ns**. Match the actual lab delay to the sample grid or validate a fractional-grid method
-before interpreting a long sequence of nominal 247 ns modes; rounding can accumulate timing drift.
-Changing the temporal template or sample rate requires a new calibration.
+Time-based widths use sample boundaries `floor(k*T*Fs)`, rather than rounding every mode to the
+same length. At 125 MS/s, the requested 308 ns period alternates 38/39 samples without accumulated
+rounding drift. The two templates are precomputed and independently normalized for equal discrete
+white-noise gain. Their 304/312 ns supports remain a discrete approximation to a fixed 308 ns
+continuous support; this does not establish optical synchronization. Explicit `modeSamples: 31`
+still selects a fixed 248 ns period. Changing the temporal template or sample rate requires a new
+calibration and verification of the optical alignment.
+
+For the 2D state, Chapter 3, Eqs. (3.13)–(3.14), uses eight terms for circumference `N`:
+
+```text
+X[k] = A[k] + B[k] - A[k+1] - B[k+1] - A[k+N] + B[k+N] - A[k+N+1] + B[k+N+1]
+P[k] = A[k] + B[k] + A[k+1] + B[k+1] - A[k+N] + B[k+N] + A[k+N+1] - B[k+N+1]
+```
+
+Supply these as custom rows with the experiment's actual `N`. Each distinct unit-weight vacuum
+term has variance 1/2, giving reference variance 4. A/B denote the quadratures physically measured
+in that acquisition's X or P basis. The existing four-term lab default remains a separate formula;
+it is not a 2D preset. The [optimization report](../../benchmarks/reports/weighted-processing-optimization-2026-10-30.md)
+includes numerical checks of both eight-term rows and the retained temporal integration.
 
 ## Locking and collection windows
 
@@ -219,8 +241,17 @@ template samples and nullifier rows with `name`, `start` and a list of `terms`. 
 ```
 
 Applying new configuration clears prior results and calibration. Use validated coefficient rows
-instead of executable formula strings. The same representation can eventually be translated to
-on-board coefficients without evaluating arbitrary injected code.
+for nullifiers. The temporal mode can also be edited in **Setup… → Mode function** using a
+restricted Python math expression, for example `exp(-0.5*(t/(T/5))**2)`. `t` is centered time
+in seconds, `T` is the current bin width in seconds and `f` is the configured bandwidth in Hz.
+`pi`, arithmetic, `**`, and the documented [math functions](../apps/native_receiver/README.md)
+are supported, including `np.exp(...)` notation. A blank expression uses the selected analytic
+shape. A custom expression and an explicit template cannot be active together.
+
+Expressions retain the selected shape's sampling convention and automatic normalization.
+The host samples and validates the expression for each bin length; native C workers receive
+these coefficients rather than evaluating Python. Rebuild an existing native worker from the
+updated sources to use this feature. Desktop/engine Python processing needs no worker update.
 
 | JSON setting | Units / values | New receiver default |
 | --- | --- | --- |
@@ -233,6 +264,7 @@ on-board coefficients without evaluating arbitrary injected code.
 | `triggerDelaySeconds` | seconds after accepted edge | `0` |
 | `triggerHoldoffSeconds` | minimum seconds between accepted edges | `0.010` |
 | `modeShape` | `lab_gaussian_linear_cosine`, `gaussian_linear`, `gaussian_linear_cosine` | `lab_gaussian_linear_cosine` |
+| `modeExpression` | Python math expression; empty uses the selected analytic shape | `""` |
 | `modeWidthSeconds` | seconds per nominal temporal mode | `308e-9` |
 | `measurementFrequencyHz` | lab parameter; `kappa/(2*pi)` for paper shape | `6e6` |
 | `explicitModeTemplate` | discrete finite nonzero samples, overrides analytic shape | `[]` |

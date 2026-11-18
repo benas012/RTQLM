@@ -42,7 +42,7 @@ SPECTRUM_MIN_INTERVAL_MS = 180
 ENGINE_READY_TIMEOUT_SECONDS = 10.0
 ENGINE_HEALTH_TIMEOUT_SECONDS = 1.0
 ENGINE_CONNECT_TIMEOUT_SECONDS = 5.0
-REDPITAYA_CONNECT_TIMEOUT_SECONDS = 30.0
+REDPITAYA_CONNECT_TIMEOUT_SECONDS = 360.0
 REDPITAYA_START_TIMEOUT_SECONDS = 8.0
 ENGINE_PING_INTERVAL_MS = 3000
 ENGINE_PROCESS_TITLE = "RPs Server"
@@ -133,7 +133,7 @@ FONTS = {
     "title": ("Segoe UI", 20, "bold"),
     "mono": ("Consolas", 10),
     "mono_bold": ("Consolas", 11, "bold"),
-    "metric": ("Segoe UI", 19, "bold"),
+    "metric": ("Consolas", 19, "bold"),
 }
 DIMENSIONS = {
     "sidebar_width": 258,

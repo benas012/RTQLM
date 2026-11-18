@@ -1,0 +1,3 @@
+RTQLM E1 synchronized raw acquisition
+Commit c3fc4f6ebebf9b24f008ecb606eb7a3a23f62422
+Release_2026.1 + RTQLM_E1_SYNC

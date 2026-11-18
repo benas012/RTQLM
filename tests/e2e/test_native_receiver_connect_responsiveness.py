@@ -114,6 +114,15 @@ def check_slow_redpitaya_connect_keeps_tk_ui_responsive(
 
         assert len(app.toast_frames) == 1
         assert app.toast_frames[0].winfo_exists()
+        toast = app.toast_frames[0]
+        copy_button = next(widget for widget in toast.winfo_children()[0].winfo_children()
+                           if widget.winfo_class() == "Button" and widget.cget("text") == "Copy")
+        copy_button.invoke()
+        assert app.clipboard_get() == (
+            "Connection failed\nCould not connect to Red Pitaya. Timed out after 8s"
+        )
+        assert copy_button.cget("text") == "Copied"
+        assert toast.winfo_exists()
         app._dismiss_toast(app.toast_frames[0])
         app._show_connection_failure(
             "Connection failed",

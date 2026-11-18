@@ -12,7 +12,7 @@ import numpy as np
 from apps.native_receiver.calibration_ui import CalibrationProgress
 from apps.native_receiver.constants import COLORS
 from apps.native_receiver.dialogs import ToolTip
-from apps.native_receiver.helpers import set_if_changed
+from apps.native_receiver.helpers import format_readout, set_if_changed
 from apps.native_receiver.nullifier_acquisition import (
     AcquisitionWindowControls,
     AnalysisControls,
@@ -20,6 +20,7 @@ from apps.native_receiver.nullifier_acquisition import (
     match_builtin_basis,
 )
 from apps.native_receiver.nullifier_renderer import (
+    AMPLITUDE_CHOICES,
     PLOT_CHOICES,
     NullifierRendererMixin,
     select_nullifier_traces,
@@ -76,12 +77,13 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
                 anchor="w"
             )
             ttk.Label(card, textvariable=self.metric_values[index], style="Hero.TLabel",
+                       width=12, anchor="w",
                        foreground=self.palette["ch1" if index == 0 else "ch2"]).pack(anchor="w")
         metrics.columnconfigure(2, weight=1)
         right = ttk.Frame(metrics, style="Surface.TFrame")
         right.grid(row=0, column=2, sticky="e")
         ttk.Label(right, textvariable=self.mode_summary, style="Reference.TLabel",
-                   justify="right", anchor="e").pack(anchor="e", pady=(0, 4))
+                   width=24, justify="right", anchor="e").pack(anchor="e", pady=(0, 4))
         self.calibration_progress_view = CalibrationProgress(right, receiver)
         self.calibration_progress_view.pack(anchor="e")
 
@@ -128,6 +130,7 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
             button.pack(side="left", padx=(0, 5))
             ToolTip(button, {"Record": "Record the reference for 10 seconds, "
                             "then finish automatically. "
+                            "Tagged captures use both E1 HIGH and LOW for this reference. "
                             "For optical measurements, "
                             "measure vacuum shot noise with the same detector settings.",
                             "Finish": "Finish early and use the measured reference variance.",
@@ -151,6 +154,12 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
             state="readonly",
             width=17,
         ).pack(side="left")
+        ttk.Button(self.setup_panel, text="Use 62.5 MS/s server stream",
+                   command=self._server_stream).pack(anchor="w", pady=(10, 0))
+        ttk.Label(self.setup_panel,
+                  text="Server stream: E1.3 HIGH gates analysis; "
+                       "uncertain edges and gaps are excluded.",
+                  style="Toolbar.TLabel", wraplength=480).pack(anchor="w", pady=(4, 0))
         ttk.Button(self.setup_panel, text="Use 125 MS/s buffered captures",
                    command=self._buffered_capture).pack(anchor="w", pady=(10, 0))
         ttk.Label(self.setup_panel, text="Buffered: 5 ms acquisitions with gaps between captures.",
@@ -174,7 +183,8 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
         footer = ttk.Frame(self, style="Surface.TFrame", padding=(12, 6))
         footer.grid(row=6, column=0, sticky="ew")
         self.footer_labels = [
-            ttk.Label(footer, textvariable=variable, style="Muted.TLabel", wraplength=700)
+            ttk.Label(footer, textvariable=variable, style="Numeric.Muted.TLabel",
+                      width=1, anchor="w", wraplength=700)
             for variable in (self.readout, self.schedule)
         ]
         for label in self.footer_labels:
@@ -219,17 +229,22 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
         state = ("Recording reference" if result.calibrating else
                  "Reference ready" if result.calibrated else "Reference needed")
         set_if_changed(self.reference_state, state)
-        traces, _unit, logarithmic = select_nullifier_traces(result, self.plot_choice.get())
-        quantity = "dB" if logarithmic else "amplitude" if self.plot_choice.get() == "Amplitude" \
-            else "variance"
+        choice = self.plot_choice.get()
+        traces, _unit, logarithmic = select_nullifier_traces(result, choice)
+        quantity = "amplitude" if choice in AMPLITUDE_CHOICES else "variance"
+        if logarithmic:
+            quantity = "dB"
         pairs = list(traces.items())
         for index in range(2):
             if index < len(pairs):
                 name, values = pairs[index]
                 finite = np.asarray(values)[np.isfinite(values)]
-                value = f"{finite[-1]:+.2f} dB" if logarithmic and finite.size else (
-                    f"{finite[-1]:.4g}" if finite.size else "—"
-                )
+                if not finite.size:
+                    value = "—"
+                elif logarithmic:
+                    value = format_readout(finite[-1], width=9, decimals=2, signed=True) + " dB"
+                else:
+                    value = format_readout(finite[-1])
                 set_if_changed(self.metric_titles[index], f"{name} · latest {quantity}")
                 set_if_changed(self.metric_values[index], value)
             else:
@@ -239,8 +254,14 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
         scale, unit = (1e9, "ns") if period < 1e-6 else (
             (1e6, "µs") if period < 1e-3 else (1e3, "ms")
         )
+        maximum = getattr(result, "mode_samples_max", 0) or result.mode_samples
+        alternating = maximum != result.mode_samples
+        samples = (f"{result.mode_samples:4d}/{maximum:4d}" if alternating
+                   else f"{result.mode_samples:4d}")
         set_if_changed(self.mode_summary,
-                       f"{result.mode_samples} samples / mode\n{period * scale:g} {unit} / mode")
+                       f"{samples} samples / mode\n"
+                       f"{format_readout(period * scale, width=9)} {unit} "
+                       + ("average" if alternating else "/ mode"))
 
     def load_config(self, config: Any) -> None:
         self._clear_plot_view()
@@ -280,6 +301,17 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
             self.analysis.sample_rate_provider = provider
             self.analysis.refresh_sampling()
 
+    def _server_stream(self) -> None:
+        provider = self.analysis.sample_rate_provider
+        try:
+            self.analysis.sample_rate_provider = lambda: 62_500_000.0
+            self.parent.start_server_stream(self._selected_config())
+        except Exception as exc:
+            messagebox.showerror("Server stream unavailable", str(exc), parent=self)
+        finally:
+            self.analysis.sample_rate_provider = provider
+            self.analysis.refresh_sampling()
+
     def _preset(self) -> None:
         try:
             config = self._selected_config()
@@ -308,6 +340,7 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
                 mode_width_seconds=current.mode_width_seconds,
                 mode_samples=None,
                 mode_shape=current.mode_shape,
+                mode_expression=current.mode_expression,
                 min_samples_per_mode=current.min_samples_per_mode,
                 measurement_frequency_hz=current.measurement_frequency_hz,
                 explicit_mode_template=current.explicit_mode_template,
@@ -376,8 +409,10 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
         device = self.parent.__dict__.get("selected_device")
         if device is not None and getattr(device, "acquisition_mode", "streaming") == "buffered":
             capture_ms = device.capture_samples / 125_000_000 * device.decimation * 1e3
-            description = (f"Buffered · {capture_ms:g} "
-                           "ms per capture · gaps between captures · waveform preview only")
+            e1 = (f" · E1 HIGH excluded: {result.rejected_modes:6d} modes"
+                  if result and result.tagged_e1 and not error else "")
+            description = (f"Buffered · {capture_ms:.5g} ms per capture{e1} "
+                           "· gaps between captures · waveform preview")
         set_if_changed(self.schedule, description)
         buffered = getattr(device, "acquisition_mode", "streaming") == "buffered"
         self._refresh_after_id = self.parent.after(50 if buffered else REFRESH_INTERVAL_MS,

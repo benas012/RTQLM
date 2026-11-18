@@ -141,6 +141,7 @@ class NotificationsMixin:
             fg=COLORS["text"],
             font=("Segoe UI", 9, "bold"),
             anchor="w",
+            wraplength=240,
         )
         title_label.grid(row=0, column=1, sticky="ew", padx=(10, 8), pady=(8, 0))
         message_label = tk.Label(
@@ -153,7 +154,24 @@ class NotificationsMixin:
             justify="left",
             wraplength=340,
         )
-        message_label.grid(row=1, column=1, sticky="ew", padx=(10, 8), pady=(2, 8))
+        message_label.grid(row=1, column=1, columnspan=3, sticky="ew",
+                           padx=(10, 8), pady=(2, 8))
+
+        def copy_message() -> None:
+            try:
+                self.clipboard_clear()
+                self.clipboard_append(f"{title}\n{message}")
+                copy_button.configure(text="Copied")
+            except tk.TclError:
+                copy_button.configure(text="Retry")
+
+        copy_button = tk.Button(
+            frame, text="Copy", command=copy_message, width=6,
+            bg=COLORS["panel_2"], fg=COLORS["text_secondary"],
+            activebackground=COLORS["panel_3"], activeforeground=COLORS["text"],
+            font=FONTS["small"], relief="flat", bd=0, padx=4, pady=2,
+        )
+        copy_button.grid(row=0, column=2, sticky="ne", padx=(0, 2), pady=4)
         close_button = tk.Button(
             frame,
             text="x",
@@ -167,7 +185,7 @@ class NotificationsMixin:
             padx=6,
             pady=2,
         )
-        close_button.grid(row=0, column=2, sticky="ne", padx=(0, 4), pady=4)
+        close_button.grid(row=0, column=3, sticky="ne", padx=(0, 4), pady=4)
         frame.pack(fill="both", expand=True)
         self.toast_frames.append(toast)
         while len(self.toast_frames) > 4:

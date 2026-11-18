@@ -28,7 +28,7 @@ def assert_controls_inside(window: tk.Misc) -> None:
 
 
 def check_original_layout() -> None:
-    with receiver() as app:
+    with receiver(show_live_signal=False) as app:
         app.attributes("-alpha", 0)
         panel = app.nullifier_panel
         controls = panel.analysis
@@ -40,6 +40,11 @@ def check_original_layout() -> None:
         controls.variables['mode_width_us'].set('.320')
         assert 'mode_samples' not in controls.variables
         assert 'Samples / mode: 40' in controls.sampling_readout.get()
+        controls.variables['mode_width_us'].set('.308')
+        assert 'Samples / mode: 38/39' in controls.sampling_readout.get()
+        assert 'average width: 0.308' in controls.sampling_readout.get()
+        assert 'bins: 0.304/0.312' in controls.sampling_readout.get()
+        controls.variables['mode_width_us'].set('.320')
         rate[0] = 15_625_000
         controls.refresh_sampling()
         assert controls.variables['mode_width_us'].get() == '.320'
@@ -60,12 +65,25 @@ def check_original_layout() -> None:
         for geometry in ("1280x900", "1180x840", "960x740"):
             app.geometry(geometry)
             app.update()
-            assert app.canvas.winfo_ismapped()
+            assert not app.canvas.winfo_ismapped()
+            assert not app.waveform_surface.winfo_ismapped()
             assert app.analysis_notebook.winfo_ismapped()
             assert app.analysis_notebook.select() == str(panel)
             assert panel.canvas.winfo_ismapped()
             assert not panel.setup_window.winfo_ismapped()
             assert panel.canvas.winfo_height() >= 120
+            expanded_height = panel.canvas.winfo_height()
+            app.show_live_signal.set(True)
+            app._update_live_signal_visibility()
+            app.update()
+            assert app.canvas.winfo_ismapped()
+            assert panel.canvas.winfo_height() < expanded_height
+            assert_controls_inside(app)
+            app.show_live_signal.set(False)
+            app._update_live_signal_visibility()
+            app.update()
+            assert not app.canvas.winfo_ismapped()
+            assert panel.canvas.winfo_height() == expanded_height
             assert_controls_inside(app)
             panel._toggle_settings()
             app.update()
@@ -84,6 +102,12 @@ def check_original_layout() -> None:
             pending = [app]
             while pending:
                 widget = pending.pop()
+                if isinstance(widget, ttk.Combobox):
+                    if str(widget.cget("textvariable")) == str(app.acquisition_decimation):
+                        assert not widget.winfo_ismapped()
+                if isinstance(widget, (ttk.Label, ttk.Button)):
+                    if widget.cget("text") in {"Decimation (÷)", "Low delay", "2CH stable"}:
+                        assert not widget.winfo_ismapped()
                 if isinstance(widget, ttk.Button):
                     assert "More controls" not in widget.cget("text")
                     assert "Analysis settings" not in widget.cget("text")

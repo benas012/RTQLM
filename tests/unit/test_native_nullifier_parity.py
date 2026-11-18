@@ -41,9 +41,45 @@ def native_runner(tmp_path_factory: pytest.TempPathFactory) -> list[str]:
     return [str(binary), "--replay"]
 
 
+@pytest.mark.parametrize("shape", ["identity", "gaussian_linear", "gaussian_linear_cosine",
+                                   "lab_gaussian_linear_cosine"])
+@pytest.mark.parametrize("width", [256e-9, 308e-9])
+def test_custom_expression_native_projection_matches_python(native_runner, shape, width):
+    from quantum_light_engine.devices.board_nullifiers import BoardNullifierProcessor
+    from quantum_light_engine.post_processing import single_mode_processing_config
+
+    config = replace(
+        single_mode_processing_config(), mode_shape=shape, mode_width_seconds=width,
+        mode_expression="exp(-0.5*(t/(T/5))**2) * cos(2*pi*f*t) + 0.1",
+        history_modes=1000, variance_window_modes=5, window_mode="continuous",
+        collection_guard_seconds=0, collection_end_guard_samples=0,
+    )
+    board = BoardNullifierProcessor("board.local", "/root/processor", 1, 3, 18902)
+    settings = board._settings(config)
+    settings["captureSamples"] = 4096
+    rng = np.random.default_rng(612)
+    a, b = rng.normal(0, 0.2, (2, 4096)).astype(np.float32)
+    commands = [
+        {"command": "configure", "config": settings},
+        {"command": "capture", "samples": {"a": a.tolist(), "b": b.tolist()}},
+    ]
+    reply = subprocess.run(
+        native_runner, input="\n".join(json.dumps(command) for command in commands) + "\n",
+        text=True, capture_output=True, timeout=30, check=True,
+    )
+    configured, actual = map(json.loads, reply.stdout.splitlines())
+    assert configured["ok"], configured
+    assert actual["ok"], actual
+    expected = RealtimeClusterProcessor(config).feed(a, b, 125e6)
+    for channel in ("a", "b"):
+        values = actual["quadratures"][channel]
+        np.testing.assert_allclose(values, expected.quadratures[channel][:len(values)],
+                                   rtol=2e-11, atol=1e-16)
+
+
 @pytest.mark.parametrize("shape", ["identity", "identity_width", "gaussian_linear",
                                    "lab_gaussian_linear_cosine"])
-@pytest.mark.parametrize("delay", [-2, 0, 2])
+@pytest.mark.parametrize("delay", [-2, 0, 2, 100])
 @pytest.mark.parametrize("threshold", [None, 0.8])
 def test_native_projection_and_rolling_variance_match_python_reference(
     native_runner: list[str], shape: str, delay: int, threshold: float | None,

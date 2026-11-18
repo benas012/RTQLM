@@ -1,4 +1,5 @@
 from dataclasses import replace
+from itertools import pairwise
 
 import numpy as np
 import pytest
@@ -17,6 +18,7 @@ from quantum_light_engine.post_processing import (
     config_from_dict,
     config_to_dict,
     lab_processing_config,
+    normalize_mode,
     rolling_variance,
 )
 
@@ -75,10 +77,16 @@ def test_lab_stream_matches_offline_projection_across_packets() -> None:
     cfg = replace(lab_processing_config(), window_mode="continuous",
                   channel_b_delay_samples=2, collection_guard_seconds=0,
                   collection_end_guard_samples=0)
-    mode = build_lab_mode_template(308e-9, 6e6, 1 / 15.625e6)
-    usable = (len(a) - 2) // len(mode) * len(mode)
-    expected_a = a[:usable].reshape(-1, len(mode)) @ mode / 15.625e6
-    expected_b = b[2:usable+2].reshape(-1, len(mode)) @ mode / 15.625e6
+    rate = 15.625e6
+    boundaries = np.floor(np.arange(1000) * 308e-9 * rate + 1e-10).astype(int)
+    boundaries = boundaries[boundaries <= len(a) - 2]
+    expected_a, expected_b = [], []
+    for start, stop in pairwise(boundaries):
+        mode = build_lab_mode_template(np.nextafter((stop - start) / rate, np.inf),
+                                       6e6, 1 / rate)
+        mode = normalize_mode(mode, 1 / rate)
+        expected_a.append(a[start:stop] @ mode / rate)
+        expected_b.append(b[start + 2:stop + 2] @ mode / rate)
     processor = RealtimeClusterProcessor(cfg)
     qa, qb = [], []
     for start, stop in [(0, 3), (3, 251), (251, 1013), (1013, 4020)]:

@@ -17,6 +17,7 @@ from apps.native_receiver.helpers import (
     compute_spectrum,
     draw_spectrum_line,
     format_frequency,
+    format_readout,
     time_monotonic_ns,
 )
 from apps.native_receiver.nullifier_ui import NullifierMonitorPanel
@@ -95,6 +96,8 @@ class SpectrumUiMixin:
             spectrum_controls,
             textvariable=self.spectrum_peak,
             style="MetricValue.TLabel",
+            width=36,
+            anchor="e",
         ).grid(row=0, column=6, sticky="e")
         channel_box.bind("<<ComboboxSelected>>", lambda _event: self._redraw_latest_spectrum())
         fft_box.bind("<<ComboboxSelected>>", lambda _event: self._redraw_latest_spectrum())
@@ -276,8 +279,8 @@ class SpectrumUiMixin:
             left_pad,
         )
         self.spectrum_peak.set(
-            f"Peak: {format_frequency(float(spectrum['peak_hz']))} / "
-            f"{float(spectrum['peak_db']):.1f} dBFS"
+            f"Peak: {format_frequency(float(spectrum['peak_hz'])):>11} / "
+            f"{format_readout(float(spectrum['peak_db']), width=7, decimals=1, signed=True)} dBFS"
         )
 
     def _resize_spectrum_plot(self, _event: tk.Event[Any]) -> None:

@@ -132,9 +132,10 @@ def test_generated_pair_cancels_the_actual_receiver_lab_nullifier() -> None:
 
     from quantum_light_engine.post_processing import build_lab_mode_template
 
-    config = lab_processing_config()
+    # This tone advances by a quarter cycle every four ADC samples: 256 ns.
+    config = replace(lab_processing_config(), mode_width_seconds=256e-9)
     template = build_lab_mode_template(
-        308e-9, 6e6, 1 / 15625000, oversample=1000, min_samples_per_mode=4
+        256e-9, 6e6, 1 / 15625000, oversample=1000, min_samples_per_mode=4
     )
     variances = []
     for phase in (-90, 90):

@@ -63,7 +63,9 @@ def test_new_command_session_records_identity_and_releases_only_its_previous_pro
                                        (stdin, stdout, stderr)]
     monkeypatch.setattr('quantum_light_engine.devices.board_nullifiers.paramiko.SSHClient',
                         lambda: client)
+    board._ensure_installed = Mock()
     board._connect()
+    board._ensure_installed.assert_called_once_with(client)
     cleanup = client.exec_command.call_args_list[0].args[0]
     assert '/proc/1234/stat' in cleanup and '"5678"' in cleanup
     assert '/proc/1234/exe' in cleanup and '/root/processor' in cleanup

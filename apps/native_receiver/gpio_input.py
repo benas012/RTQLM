@@ -18,7 +18,7 @@ def input_readout(state: dict[str, Any]) -> tuple[str, str]:
     if state.get("state") == "watching" and type(state.get("level")) is int:
         if state["level"] in (0, 1):
             return ("HIGH · 1", COLORS["ch1"]) if state["level"] else (
-                "LOW · 0", COLORS["ch2"])
+                "LOW  · 0", COLORS["ch2"])
     return "—", COLORS["text_secondary"]
 
 
@@ -50,7 +50,7 @@ class GpioInputDialog(tk.Toplevel):
         ttk.Entry(body, textvariable=self.interval, width=14).grid(
             row=2, column=1, sticky="w", padx=8)
         self.level = tk.Label(body, text="—", bg=COLORS["bg"], fg=COLORS["text_secondary"],
-                              font=("Segoe UI", 30, "bold"), padx=20, pady=12)
+                              font=("Consolas", 30, "bold"), width=12, padx=20, pady=12)
         self.level.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(8, 12))
         ttk.Label(body, textvariable=self.wiring, wraplength=460).grid(
             row=4, column=0, columnspan=3, sticky="w")
@@ -61,7 +61,7 @@ class GpioInputDialog(tk.Toplevel):
         self.stop_button.grid(row=5, column=1, sticky="ew", padx=8, pady=12)
         ttk.Button(body, text="Close", command=self._close).grid(row=5, column=2, sticky="ew")
         ttk.Label(body, textvariable=self.detail, wraplength=460, justify="left",
-                  font=FONTS["body"]).grid(row=6, column=0, columnspan=3, sticky="w")
+                  font=FONTS["mono"], width=50).grid(row=6, column=0, columnspan=3, sticky="w")
         ttk.Label(body, text="Slow level monitoring. Short pulses may be missed.\n"
                   "The readings are not aligned to ADC samples or temporal modes.\n"
                   "Reading continues when closed; Stop reading or Disconnect ends it.",
@@ -126,10 +126,10 @@ class GpioInputDialog(tk.Toplevel):
             config = state.get("config", {})
             pin = config.get("pin", self.pin.get())
             interval = state.get("lastPollIntervalMs")
-            timing = f" · actual interval {interval:.1f} ms" if interval is not None else ""
+            timing = f" · actual interval {interval:6.1f} ms" if interval is not None else ""
             self.detail.set(state.get("lastError") or (
                 f"{pin} · {state.get('state', 'unknown')}{timing}\n"
-                f"Observed transitions: {state.get('triggerCount', 0)} · "
+                f"Observed transitions: {state.get('triggerCount', 0):8d} · "
                 f"Last read: {state.get('lastReadAtUtc') or '—'}"))
         queued = self.__dict__.pop("_queued", None)
         self._request(*queued) if queued else self._request("GET")

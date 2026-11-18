@@ -8,10 +8,13 @@ from typing import Any
 
 import numpy as np
 
+from apps.native_receiver.constants import FONTS
+from apps.native_receiver.helpers import format_readout
 from quantum_light_engine.post_processing import ClusterProcessingResult
 
 TRACE_COLORS = ("#22c55e", "#38bdf8", "#f59e0b", "#f472b6", "#a78bfa")
-PLOT_CHOICES = ("Auto", "Variance", "Squeezing (dB)", "Amplitude")
+PLOT_CHOICES = ("Auto", "Variance", "Squeezing (dB)", "Amplitude", "Quadratures")
+AMPLITUDE_CHOICES = {"Amplitude", "Quadratures"}
 
 
 def select_nullifier_traces(
@@ -25,6 +28,8 @@ def select_nullifier_traces(
     if choice == "Amplitude":
         return result.nullifiers, ("mode quadrature" if result.analysis_mode == "single"
                                   else "nullifier amplitude"), False
+    if choice == "Quadratures":
+        return result.quadratures, "mode quadrature", False
     unit = (
         "ensemble variance at each mode"
         if result.variance_estimator == "ensemble"
@@ -113,7 +118,6 @@ class NullifierRendererMixin:
 
     def _clear_plot_view(self) -> None:
         self._last_chart_result = None
-        self._drawn_result = None
         self._plot_bounds = None
         self._plot_key = None
         self._plot_view_modes = None
@@ -194,8 +198,9 @@ class NullifierRendererMixin:
         result = getattr(self, "_last_chart_result", None)
         if result is None:
             return
-        traces, _, _ = select_nullifier_traces(result, self.plot_choice.get())
-        starts = result.variance_index_starts if self.plot_choice.get() != "Amplitude" else {}
+        choice = self.plot_choice.get()
+        traces, _, _ = select_nullifier_traces(result, choice)
+        starts = result.variance_index_starts if choice not in AMPLITUDE_CHOICES else {}
         count = max((len(v) * result.display_stride + int(starts.get(name, 0))
                      for name, v in traces.items()), default=2000)
         self._plot_view_modes = max(
@@ -236,14 +241,15 @@ class NullifierRendererMixin:
                      getattr(self, "_plot_view_modes", None), getattr(self, "_plot_bounds", None))
         if getattr(self, "_render_signature", None) == signature:
             return
-        self._drawn_result = result
         if choice == "Squeezing (dB)" and not result.calibrated:
             self._draw_message("Calibrate shot noise to display squeezing in dB")
             self._set_readout("Shot-noise calibration required")
             return
         ensemble_plot = result.variance_estimator in {"ensemble", "lab_rolling"} \
-            and choice != "Amplitude"
-        view_count = getattr(self, "_plot_view_modes", None) or (25_000 if ensemble_plot else 2000)
+            and choice not in AMPLITUDE_CHOICES
+        default_count = (result.captured_modes if result.tagged_e1 and result.captured_modes
+                         else 25_000 if ensemble_plot else 2000)
+        view_count = getattr(self, "_plot_view_modes", None) or default_count
         self._plot_view_modes = view_count
         stride = result.display_stride
         view_points = max(1, (view_count + stride - 1) // stride)
@@ -259,6 +265,13 @@ class NullifierRendererMixin:
         finite_sets = list(displayed.values())
         finite_sets = [v[np.isfinite(v)] for v in finite_sets if np.any(np.isfinite(v))]
         if not finite_sets:
+            if result.tagged_e1 and result.captured_modes and (
+                result.rejected_modes == result.captured_modes
+            ):
+                self._clear_plot_view()
+                self._draw_message("No complete E1 LOW modes: HIGH and transition modes excluded")
+                self._set_readout("Full record captured · E1 HIGH excluded from calculation")
+                return
             zero_variance = logarithmic and any(np.any(np.isneginf(v)) for v in displayed.values())
             message = ("Zero variance gives -infinity dB; no finite squeezing estimate"
                        if zero_variance else "Waiting for complete, finite mode estimates")
@@ -288,7 +301,7 @@ class NullifierRendererMixin:
                     low, high = low - margin, high + margin
                 else:
                     low, high = min(-10.0, low), max(3.0, high)
-            elif choice == "Amplitude":
+            elif choice in AMPLITUDE_CHOICES:
                 bound = max(abs(low), abs(high), 1e-12)
                 low, high = -bound, bound
             else:
@@ -305,7 +318,8 @@ class NullifierRendererMixin:
             self._chart_item("line", f"grid:{index}", left, y, left + plot_width, y,
                              fill=self.palette["plot_grid"])
             self._chart_item("text", f"ytick:{index}",
-                left - 7, y, text=f"{value:.2g}", fill=self.palette["text_secondary"], anchor="e"
+                left - 7, y, text=f"{value:.2g}", fill=self.palette["text_secondary"],
+                anchor="e", font=("Consolas", 8),
             )
             x = left + index * plot_width / 4
             self._chart_item("line", f"xgrid:{index}", x, top, x, top + plot_height,
@@ -338,7 +352,9 @@ class NullifierRendererMixin:
                                      x - 1, y - 1, x + 1, y + 1, fill=color, outline=color)
             finite = shown[np.isfinite(shown)]
             if finite.size:
-                latest.append(f"{name}={float(finite[-1]):.4g}")
+                value = format_readout(float(finite[-1]), decimals=2 if logarithmic else 3,
+                                       signed=logarithmic)
+                latest.append(f"{name}={value}")
             self._chart_item("text", f"legend:{name}",
                 left + index * 165,
                 12,
@@ -349,22 +365,23 @@ class NullifierRendererMixin:
             )
         duration_ms = view_count * result.mode_period_seconds * 1e3
         time_label = (
-            f"within collection · 0-{duration_ms:.3g} ms"
+            f"within collection · 0-{format_readout(duration_ms)} ms"
             if ensemble_plot
-            else f"accepted mode time · {duration_ms:.3g} ms"
+            else f"accepted mode time · {format_readout(duration_ms)} ms"
         )
         if ensemble_plot:
             counts = [v[v > 0] for v in result.variance_counts.values() if np.any(v > 0)]
             if counts:
                 minimum = min(int(np.min(v)) for v in counts)
                 maximum = max(int(np.max(v)) for v in counts)
-                time_label += f" · N={minimum}-{maximum} windows"
+                time_label += f" · N={minimum:5d}-{maximum:5d} windows"
         elif result.analysis_mode == "single":
-            time_label += f" · {result.variance_window_modes} modes/window"
+            time_label += f" · {result.variance_window_modes:5d} modes/window"
         self._chart_item("text", "time-label",
             left,
             height - (27 if narrow else 10),
             text=time_label,
+            font=FONTS["mono"],
             fill=self.palette["text_secondary"],
             anchor="w",
         )

@@ -181,7 +181,8 @@ class DeviceNullifierProcessor:
         # Same standard +/-1 V STEMlab scale used by the receiver. Calibration
         # is applied to projected modes, before the commanded weighted sums.
         volts = {
-            name: (samples.astype(np.float64) / 8192.0 if samples is not None else
+            name: ((samples.astype(np.float64) - (frame.adc_zero_ch1 if name == 'a' else frame.adc_zero_ch2))
+                   * (frame.adc_scale_ch1 if name == 'a' else frame.adc_scale_ch2) if samples is not None else
                    np.zeros(frame.samples_per_channel, dtype=np.float64))
             for name, samples in channels.items()
         }

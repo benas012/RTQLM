@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import shlex
 import time
 from dataclasses import replace
@@ -15,11 +16,13 @@ from quantum_light_engine.post_processing import (
     ClusterProcessingConfig,
     config_from_dict,
     config_to_dict,
+    expression_mode_templates,
     lab_processing_config,
     processing_nullifiers,
     single_mode_processing_config,
 )
 
+from .native_install import ensure_native_worker
 from .nullifiers import DeviceNullifierProcessor, NullifierCommand, _validate_config_keys
 
 
@@ -52,9 +55,21 @@ class BoardNullifierProcessor(DeviceNullifierProcessor):
         self._stale_process: tuple[int, int] | None = None
         self.buffered = False
         self.capture_samples = 625_024
+        self.variance_only = False
+        self.raw_readout = "ram_copy"
+        self.measurement_window_ms = 5.0
         self._previous_fpga: str | None = None
         self._capture_result: tuple[dict[str, Any], ClusterProcessingConfig] | None = None
         self._capture_metrics: dict[str, Any] = {}
+        self.auto_install = True
+        self._installation: str | None = None
+
+    def _ensure_installed(self, client: Any, target: str | None = None) -> None:
+        self._installation = ensure_native_worker(
+            client, self.executable,
+            target or ("rp-buffered-board" if self.buffered else "rp-nullifierd"),
+            auto_install=self.auto_install,
+        )
 
     def _call(self, command: dict[str, object]) -> dict[str, Any]:
         if self._stdin is None or self._stdout is None:
@@ -137,9 +152,29 @@ fi
             "measurementBasis",
         }
         result = {key: value for key, value in config_to_dict(config).items() if key in keys}
+        # Evaluate formulas on the host. C receives only validated coefficients,
+        # including separate weights for alternating fractional-width bins.
+        if self.config.mode_expression:
+            result["sampledModeTemplates"] = []
+        if config.mode_expression:
+            _, templates = expression_mode_templates(config, 125_000_000 / self.decimation)
+            result["sampledModeTemplates"] = [templates[n].tolist() for n in sorted(templates)]
         result["decimation"] = self.decimation
         if self.buffered:
             result["captureSamples"] = self.capture_samples
+            measurement = min(
+                self.capture_samples, round(self.measurement_window_ms * 125000 / self.decimation)
+            )
+            result["measurementSamples"] = measurement
+            result["rawReadout"] = self.raw_readout
+            step = (len(config.explicit_mode_template) or config.mode_samples
+                    or config.mode_width_seconds * 125000000 / self.decimation)
+            # Keep every complete mode of the measurement; maxPoints only limits the display.
+            history = max(config.history_modes, math.ceil(measurement / step) + 1)
+            if history > 262144:
+                raise ValueError("Buffered measurement exceeds the 262144 temporal-mode limit")
+            result["historyModes"] = history
+            result["collectSeconds"] = self.measurement_window_ms / 1000
         result["requireFullVarianceWindow"] = config.analysis_mode == "single"
         segment = config.calibration_estimator == "segment_mean" or (
             config.calibration_estimator == "auto"
@@ -170,6 +205,7 @@ fi
             transport = client.get_transport()
             if transport is not None:
                 transport.set_keepalive(5)
+            self._ensure_installed(client)
             self._release_stale_process(client)
             # exec preserves this PID/start time. Remembering both lets a reconnect
             # clean up its own orphan without touching another board process.
@@ -246,7 +282,12 @@ fi
     def capture_preview(self) -> dict[str, Any]:
         with self._lock:
             started = time.perf_counter()
-            reply = self._call({"command": "capture", "previewPoints": 1024, "maxPoints": 500})
+            command: dict[str, object] = {"command": "capture", "maxPoints": 500}
+            if self.variance_only:
+                command["resultFields"] = "variances"
+            else:
+                command["previewPoints"] = 1024
+            reply = self._call(command)
             self._capture_result = (reply, self.config)
             self._capture_metrics = dict(reply.get("captureTimingMs", {}))
             self._capture_metrics["commandTotal"] = (time.perf_counter() - started) * 1000
@@ -276,7 +317,11 @@ fi
                         self._cached = {}
                         self._capture_result = None
             finally:
-                if self._previous_fpga is not None:
+                if self._previous_fpga == "v0.94":
+                    # Acquisition already used this image; reloading it would
+                    # reset the user's generator state without restoring anything.
+                    self._previous_fpga = None
+                elif self._previous_fpga is not None:
                     previous = self._previous_fpga
                     restore = paramiko.SSHClient()
                     restore.load_system_host_keys()
@@ -335,6 +380,7 @@ fi
             return {
                 **self._cached,
                 "backend": self.backend,
+                "processorInstallation": self._installation,
                 "config": config_to_dict(self.config),
                 "captureTimingMs": self._capture_metrics,
                 "error": self._analysis_error
@@ -345,7 +391,8 @@ fi
     def latest(self) -> dict[str, object] | None:
         if self.buffered:
             snapshot = self._capture_result
-            if self._client is None or snapshot is None or "quadratures" not in snapshot[0]:
+            if (self._client is None or snapshot is None
+                    or not ({"variances", "quadratures"} & snapshot[0].keys())):
                 return None
             return self._latest_payload(*snapshot)
         with self._lock:
@@ -366,12 +413,22 @@ fi
             int(config.variance_window_seconds / period),
             10 if config.variance_estimator == "lab_rolling" else 2,
         )
+        tagged = self.buffered and reply.get("captureTimingMs", {}).get("taggedE1")
+        tagged_status = (
+            "Shot-noise calibration uses both E1 HIGH and LOW. "
+            if tagged and reply.get("calibrating") else
+            "E1 LOW admitted; HIGH intervals excluded from calculation. " if tagged else ""
+        )
         return {
             **{key: value for key, value in reply.items() if key != "preview"},
             "modeIndexStart": 0, "measurementBasis": config.measurement_basis,
             "varianceEstimator": config.variance_estimator, "analysisMode": config.analysis_mode,
-            "varianceWindowModes": points, "rejectedModes": 0,
-            "status": (
+            "varianceWindowModes": points, "rejectedModes": int(reply.get("excludedModes", 0)),
+            "status": tagged_status + (
+                "Variances calculated in C on Red Pitaya; only variance results over TCP."
+                if self.buffered and self.variance_only else
+                "Buffered results calculated in C on Red Pitaya. Gaps between captures."
+                if tagged else
                 "Buffered capture calculated in C on Red Pitaya; gaps between captures; "
                 "waveform shows the first 1024 samples." if self.buffered else (
                     "live nullifiers calculated in C on Red Pitaya; "

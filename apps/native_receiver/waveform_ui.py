@@ -115,7 +115,8 @@ class WaveformUiMixin:
             style="Compact.TButton", command=self.fit_time
         ).pack(side="left", padx=(6, 6))
         ttk.Label(
-            self.time_control_group, textvariable=self.timebase, style="Toolbar.TLabel", width=14
+            self.time_control_group, textvariable=self.timebase,
+            style="Numeric.Toolbar.TLabel", width=18
         ).pack(side="left")
 
         self.vertical_control_group = ttk.Frame(self.advanced_signal_controls,
@@ -144,7 +145,7 @@ class WaveformUiMixin:
         ttk.Label(
             self.vertical_control_group,
             textvariable=self.y_axis_range_label,
-            style="Toolbar.TLabel",
+            style="Numeric.Toolbar.TLabel",
             width=18,
         ).pack(side="left")
 
@@ -240,7 +241,7 @@ class WaveformUiMixin:
         ttk.Label(
             self.display_control_group,
             textvariable=self.display_detail,
-            style="Toolbar.TLabel",
+            style="Numeric.Toolbar.TLabel",
         )
 
     def _build_trigger_controls(self) -> None:
@@ -318,7 +319,7 @@ class WaveformUiMixin:
         ttk.Label(
             secondary,
             textvariable=self.trigger_status,
-            style="Toolbar.TLabel",
+            style="Numeric.Toolbar.TLabel",
             width=27,
         ).pack(side="left")
         trigger_channel_box.bind(

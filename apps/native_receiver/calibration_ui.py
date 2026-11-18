@@ -17,4 +17,4 @@ class CalibrationProgress(ttk.Frame):
         )
         self.bar.pack(fill="x")
         ttk.Label(self, textvariable=receiver.calibration_text, style="Reference.TLabel",
-                   anchor="e").pack(fill="x", pady=(3, 0))
+                   width=27, anchor="e").pack(fill="x", pady=(3, 0))

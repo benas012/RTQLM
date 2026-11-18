@@ -40,30 +40,34 @@ follows:
 
 ```text
 sum(f[j]^2) * dt = 1
-q[k] = sum(v[k*N_mode + j] * f[j]) * dt
+boundary[k] = floor(k * T * Fs)
+q[k] = sum(v[boundary[k] + j] * f_bin_length[j]) * dt
 dt = 1 / Fs
 ```
 
 Identity weights are constant across the bin. Do not subtract the mean of each
 bin before this projection: that would make an identity-mode result zero.
-The lab shape is normalized on its fine grid before interpolation, following the
-script. It is not normalized again after interpolation. An explicit template can
+For alternating bin lengths, each sampled shape is normalized to the same discrete
+white-noise gain. An explicit template can
 replace the analytic weights. Use exactly the same weights, sample rate and
 channel settings for shot noise and the signal measurement; any constant scaling
 of the weights cancels from their variance ratio.
 
-The nominal width is not necessarily the actual bin duration:
+For time-based extraction, individual whole-sample bin widths can differ while the
+average period follows the requested T:
 
-| ADC rate | Automatic lab N_mode | Actual bin duration |
+| ADC rate | Samples per mode | Whole-sample bin durations |
 | --- | --- | --- |
-| 15.625 MS/s | 4 | 256 ns |
-| 31.25 MS/s | 9 | 288 ns |
-| 125 MS/s | 38 | 304 ns |
-| 200 MS/s, for a matching offline file | 61 | 305 ns |
+| 15.625 MS/s | 4 or 5 | 256 or 320 ns |
+| 31.25 MS/s | 9 or 10 | 288 or 320 ns |
+| 125 MS/s | 38 or 39 | 304 or 312 ns |
+| 200 MS/s, for a matching offline file | 61 or 62 | 305 or 310 ns |
 
-At 15.625 MS/s, four samples provide weak resolution of the lab mode and the
-256 ns bins do not follow a 308 ns optical clock. The receiver reproduces the
-script's integer-bin convention; it does not establish accurate optical timing.
+At 125 MS/s, every 77 samples span two 308 ns modes. The boundary error stays below one
+ADC sample rather than accumulating. At 15.625 MS/s, four or five samples still provide
+weak resolution of the lab mode. This method does not establish the optical starting phase;
+the experiment must provide/validate that alignment. Residual input DC can give different
+means for different bin lengths, so check detector balance and offsets before interpreting variance.
 Increasing the rate also increases transport and processing requirements. Use a
 higher sustained acquisition rate only after checking the actual connection for
 lost samples; this document does not recommend unverified continuous 125 MS/s.

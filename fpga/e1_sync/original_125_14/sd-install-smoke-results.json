@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "archiveCrcPassed": true,
+  "previewUnchanged": true,
+  "backupVerified": true,
+  "originalDeviceTreePreserved": true,
+  "gen2Preserved": true,
+  "idempotent": true,
+  "payloadSha256": {
+    "fpga.bin": "52d4a29b6d73f402d2cacd2609e483524c84c5f0e7e34cf976a9f814d751f2d6",
+    "fpga.bit": "0feeea02aec5d55dbfeef498da2e4b5b1ff0cd1c5256c092a29be8a2dba48724",
+    "git_info.txt": "d19de6492d8ca1a7b56fe5c1d8b47f0453de5abeec4a5fb1da665bb35ee9b0a9"
+  },
+  "installerSha256": "bdb9b71e15e0d66a43782e4cd31a60d22aa92304182e5151f6930b8b5d0648bc"
+}

@@ -222,6 +222,11 @@ def configure_style(window: tk.Tk) -> None:
                     bordercolor=COLORS["surface"], padding=(9, 5), font=FONTS["body"])
     style.configure("Hero.TLabel", background=COLORS["surface"],
                     foreground=COLORS["text"], font=FONTS["metric"])
+    for base in ("Muted.TLabel", "Toolbar.TLabel", "SidebarMuted.TLabel"):
+        style.configure("Numeric." + base, font=FONTS["mono"])
+    for widget in ("TEntry", "TCombobox", "TSpinbox"):
+        style.configure(widget, font=FONTS["mono"])
+        window.option_add("*" + widget + ".font", FONTS["mono"])
     style.configure("Accent.TLabel", background=COLORS["surface"],
                     foreground=COLORS["accent"], font=FONTS["body_bold"])
     style.configure("Chip.TLabel", background=COLORS["surface_elevated"],
@@ -317,6 +322,6 @@ def configure_style(window: tk.Tk) -> None:
                     troughcolor=COLORS["surface_active"], bordercolor=COLORS["surface"],
                     lightcolor=COLORS["accent"], darkcolor=COLORS["accent"], thickness=7)
     style.configure("Reference.TLabel", background=COLORS["surface"],
-                    foreground=COLORS["text_secondary"], font=FONTS["small"])
+                    foreground=COLORS["text_secondary"], font=("Consolas", 9))
     style.configure("Vertical.TScrollbar", background=COLORS["surface_active"],
                     troughcolor=COLORS["surface"], borderwidth=0, arrowsize=12)

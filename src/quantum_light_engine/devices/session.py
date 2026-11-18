@@ -167,6 +167,8 @@ class DeviceSession:
                     and self.profile.acquisition_mode != "buffered"):
                 await asyncio.to_thread(self.nullifiers.prepare_stream)
             await source.connect()
+            if self.profile.server_stream_processing:
+                await asyncio.to_thread(self.nullifiers.prepare_stream)
             self._prepared_source = source
             self._last_error = None
             self._transition(DeviceSessionState.READY)
@@ -177,6 +179,8 @@ class DeviceSession:
                 if source is not None:
                     await source.disconnect()
                 if isinstance(self.nullifiers, BoardNullifierProcessor):
+                    await asyncio.to_thread(self.nullifiers.close)
+                elif self.profile.server_stream_processing:
                     await asyncio.to_thread(self.nullifiers.close)
             except Exception:
                 logger.debug("source cleanup after failed connect", exc_info=True)
@@ -226,6 +230,8 @@ class DeviceSession:
             if self.state is DeviceSessionState.DISCONNECTED:
                 if isinstance(self.nullifiers, BoardNullifierProcessor):
                     await asyncio.to_thread(self.nullifiers.close)
+                elif self.profile.server_stream_processing:
+                    await asyncio.to_thread(self.nullifiers.close)
                 if active_source is None and self.profile.source is DeviceSource.REDPITAYA:
                     active_source = self._new_source()
                 if active_source is not None:
@@ -245,6 +251,8 @@ class DeviceSession:
                 if isinstance(self.nullifiers, BoardNullifierProcessor):
                     await asyncio.to_thread(self.nullifiers.close)
                 self._transition(DeviceSessionState.DISCONNECTED)
+                if self.profile.server_stream_processing:
+                    await asyncio.to_thread(self.nullifiers.close)
             finally:
                 self._disconnecting = False
             return self.status()
@@ -259,6 +267,8 @@ class DeviceSession:
                 await source.disconnect()
                 await source.shutdown_remote_service()
                 self._prepared_source = None
+            if self.profile.server_stream_processing:
+                await asyncio.to_thread(self.nullifiers.close)
             self.profile = profile
             if isinstance(self.nullifiers, BoardNullifierProcessor):
                 await asyncio.to_thread(self.nullifiers.close)
@@ -357,7 +367,9 @@ class DeviceSession:
                 "acquisitionMode": self.profile.acquisition_mode,
                 "captureSamples": self.profile.capture_samples,
                 "captureDurationSeconds": (
+                    .005 if self.profile.server_stream_processing else
                     self.profile.capture_samples / self._settings.sample_rate_hz),
+                "measurementWindowMs": self.profile.measurement_window_ms,
             }
         )
         return base
@@ -376,11 +388,20 @@ class DeviceSession:
         return self._new_source()
 
     def _new_source(self) -> AcquisitionSource:
+        if self.profile.server_stream_processing:
+            from .ring_source import RingStreamingSource
+            return RingStreamingSource(self.profile)
         if self.profile.source is DeviceSource.SIMULATOR:
             return SimulatedAcquisitionSource(self._settings)
         if self.profile.acquisition_mode == "buffered":
             if not isinstance(self.nullifiers, BoardNullifierProcessor):
-                raise RuntimeError("Buffered captures require the installed Red Pitaya C processor")
+                raise RuntimeError(
+                    f"ARM processing is not enabled for {self.profile.host}. "
+                    "Check QL_NATIVE_NULLIFIER_ENABLED and QL_NATIVE_NULLIFIER_HOSTS, "
+                    "then restart the engine. The C processor is checked after enabling ARM "
+                    "processing; missing processors are installed automatically if "
+                    "QL_NATIVE_NULLIFIER_AUTO_INSTALL=true."
+                )
             # The session owns the C processor. Keep its calibration and SDK
             # outputs across Stop; Disconnect releases the hardware explicitly.
             if (self._buffered_source is None
@@ -391,16 +412,53 @@ class DeviceSession:
         return RedPitayaStreamingSource(self._settings)
 
     def _new_nullifiers(self) -> DeviceNullifierProcessor:
+        if self.profile.server_stream_processing:
+            from .gated_streaming import GatedStreamingProcessor
+            return GatedStreamingProcessor(
+                self.profile.host or "", self.profile.measurement_window_ms)
+        if (self.profile.source is DeviceSource.REDPITAYA
+                and self.profile.acquisition_mode == "buffered"
+                and self.profile.buffered_processing == "server"):
+            from .server_nullifiers import ServerNullifierProcessor
+            processor = ServerNullifierProcessor(
+                self.profile.host or "", self.engine_settings.buffered_board_executable,
+                self.profile.decimation, 3, self.engine_settings.native_nullifier_port,
+                server_command=self.engine_settings.buffered_server_command,
+                transport=self.engine_settings.buffered_transport,
+                binary_port=self.engine_settings.buffered_binary_port)
+            processor.measurement_window_ms = self.profile.measurement_window_ms
+            processor.capture_samples = self.profile.capture_samples
+            processor.auto_install = self.engine_settings.native_nullifier_auto_install
+            return processor
         if _native_processing(self.profile, self.engine_settings):
-            processor = BoardNullifierProcessor(
-                self.profile.host or "", self.engine_settings.native_nullifier_executable,
+            board_processor: BoardNullifierProcessor
+            host = self.profile.host or ""
+            board_args = (
                 self.profile.decimation,
                 int(self.profile.channel_1_enabled) | (int(self.profile.channel_2_enabled) << 1),
                 self.engine_settings.native_nullifier_port,
             )
-            processor.buffered = self.profile.acquisition_mode == "buffered"
-            processor.capture_samples = self.profile.capture_samples
-            return processor
+            if (self.profile.acquisition_mode == "buffered"
+                    and self.engine_settings.buffered_transport == "tcp"):
+                from .tcp_board_nullifiers import TcpBoardNullifierProcessor
+                password = self.engine_settings.buffered_ssh_password
+                board_processor = TcpBoardNullifierProcessor(
+                    host, self.engine_settings.buffered_board_executable, *board_args,
+                    binary_port=self.engine_settings.buffered_binary_port,
+                    known_hosts=self.engine_settings.buffered_ssh_known_hosts,
+                    ssh_password=password.get_secret_value() if password is not None else None,
+                )
+                board_processor.raw_readout = self.engine_settings.buffered_arm_readout
+                board_processor.variance_only = self.engine_settings.buffered_display == "variances"
+            else:
+                board_processor = BoardNullifierProcessor(
+                    host, self.engine_settings.native_nullifier_executable, *board_args,
+                )
+            board_processor.buffered = self.profile.acquisition_mode == "buffered"
+            board_processor.capture_samples = self.profile.capture_samples
+            board_processor.measurement_window_ms = self.profile.measurement_window_ms
+            board_processor.auto_install = self.engine_settings.native_nullifier_auto_install
+            return board_processor
         return DeviceNullifierProcessor()
 
     def _transition(self, state: DeviceSessionState) -> None:
@@ -415,10 +473,14 @@ class DeviceSession:
 
 
 def _native_processing(profile: DeviceProfile, engine: EngineSettings) -> bool:
+    if profile.server_stream_processing:
+        return False
     value = profile.host or ""
     host = urlsplit(value if "://" in value else "http://" + value).hostname
     return (
-        engine.native_nullifier_enabled and profile.source is DeviceSource.REDPITAYA
+        (engine.native_nullifier_enabled or (
+            profile.acquisition_mode == "buffered" and profile.buffered_processing == "server"
+        )) and profile.source is DeviceSource.REDPITAYA
         and (not engine.native_nullifier_hosts or host in engine.native_nullifier_hosts)
     )
 
@@ -432,6 +494,7 @@ def acquisition_settings(profile: DeviceProfile, engine: EngineSettings) -> Acqu
         channel_1_enabled=profile.channel_1_enabled,
         channel_2_enabled=profile.channel_2_enabled,
         decimation=profile.decimation,
+        require_adc_timestamps=profile.server_stream_processing,
         block_size_bytes=profile.block_size_bytes,
         adc_buffer_size_bytes=profile.adc_buffer_size_bytes,
         internal_queue_capacity=engine.internal_queue_capacity,
@@ -439,7 +502,10 @@ def acquisition_settings(profile: DeviceProfile, engine: EngineSettings) -> Acqu
         reconnect_initial_seconds=engine.reconnect_initial_seconds,
         reconnect_maximum_seconds=engine.reconnect_maximum_seconds,
         streaming_module=module,
-        auto_start_streaming_app=engine.auto_start_streaming_app,
+        # The user explicitly requires keeping v0.94. This candidate server
+        # path must never load stream_app implicitly when its service is absent.
+        auto_start_streaming_app=(False if profile.server_stream_processing
+                                  else engine.auto_start_streaming_app),
         streaming_app_startup_delay_seconds=engine.streaming_app_startup_delay_seconds,
         simulator_samples_per_packet=profile.simulator_samples_per_packet,
         simulator_seed=profile.simulator_seed,

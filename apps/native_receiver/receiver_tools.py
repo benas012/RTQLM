@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 
 from apps.native_receiver.calibration_ui import CALIBRATION_SECONDS
+from apps.native_receiver.constants import REDPITAYA_CONNECT_TIMEOUT_SECONDS
 from apps.native_receiver.dialogs import (
     EngineSettingsDialog,
     SignalScriptDialog,
@@ -150,7 +151,15 @@ class ReceiverToolsMixin:
         if panel is not None:
             panel.load_config(config)
 
-    def start_buffered_capture(self, config: ClusterProcessingConfig) -> None:
+    def start_server_stream(self, config: ClusterProcessingConfig) -> None:
+        from dataclasses import replace
+
+        config = replace(config, lock_seconds=0, window_mode="periodic")
+        self.start_buffered_capture(config, server_stream=True)
+
+    def start_buffered_capture(
+        self, config: ClusterProcessingConfig, *, server_stream: bool = False,
+    ) -> None:
         from apps.native_receiver.helpers import editable_profile_payload
         from quantum_light_engine.post_processing import config_to_dict
 
@@ -165,11 +174,20 @@ class ReceiverToolsMixin:
             path = f"/api/v1/devices/{device.id}"
             self._api_for_base(base, "POST", path + "/disconnect")
             body = editable_profile_payload(self._api_for_base(base, "GET", path))
-            body.update(acquisitionMode="buffered", decimation=1, captureSamples=625_024)
+            body.update(
+                acquisitionMode="streaming" if server_stream else "buffered",
+                serverStreamProcessing=server_stream, bufferedProcessing="arm",
+                decimation=2 if server_stream else 1, captureSamples=625_024,
+            )
+            if server_stream:
+                body.update(channel1Enabled=True, channel2Enabled=True,
+                            measurementWindowMs=config.collect_seconds * 1000)
             self._api_for_base(base, "PUT", path, body)
             self._api_for_base(base, "POST", path + "/nullifiers/commands",
-                               {"command": "configure", "config": config_to_dict(config)})
-            self._api_for_base(base, "POST", path + "/connect", timeout_seconds=40)
+                               {"command": "configure", "config": config_to_dict(config)},
+                               timeout_seconds=REDPITAYA_CONNECT_TIMEOUT_SECONDS)
+            self._api_for_base(base, "POST", path + "/connect",
+                               timeout_seconds=REDPITAYA_CONNECT_TIMEOUT_SECONDS)
             self._api_for_base(base, "POST", path + "/start", timeout_seconds=40)
             return self._load_devices(base)
 
@@ -186,7 +204,8 @@ class ReceiverToolsMixin:
             self._open_device_tab(device.id)
             self._start_socket(device.id)
 
-        self._run_busy("Starting buffered captures", work, apply)
+        self._run_busy("Starting server stream" if server_stream else "Starting buffered captures",
+                       work, apply)
 
     def start_cluster_calibration(self) -> None:
         if self.__dict__.get("_calibration_started") is not None:
@@ -257,7 +276,7 @@ class ReceiverToolsMixin:
         self.calibration_progress.set(min(elapsed, CALIBRATION_SECONDS))
         remaining = max(0.0, CALIBRATION_SECONDS - elapsed)
         if remaining > 0:
-            self.calibration_text.set(f"Recording · {remaining:.1f} s left")
+            self.calibration_text.set(f"Recording · {remaining:4.1f} s left")
             self._calibration_after_id = self.after(100, self._update_calibration_progress)
             return
         self.calibration_text.set("Finishing reference…")
@@ -302,4 +321,5 @@ class ReceiverToolsMixin:
         api_base, device_id = target or (self._api_base(), self.selected_device.id)
         return EngineClient(api_base).request(
             "POST", f"/api/v1/devices/{device_id}/nullifiers/commands", body,
+            timeout_seconds=REDPITAYA_CONNECT_TIMEOUT_SECONDS,
         )

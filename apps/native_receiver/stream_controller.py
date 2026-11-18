@@ -14,6 +14,7 @@ from apps.native_receiver.api_client import EngineClient
 from apps.native_receiver.constants import (
     CONNECTION_FAILURE_BUSY_LABELS,
     CONNECTION_OVERLAY_BUSY_LABELS,
+    REDPITAYA_CONNECT_TIMEOUT_SECONDS,
     STATS_MIN_INTERVAL_MS,
     TIME_SPANS_MS,
     UI_FRAME_INTERVAL_MS,
@@ -84,7 +85,11 @@ class StreamControllerMixin:
                     runtime = await asyncio.to_thread(
                         client.request, "GET", f"/api/v1/devices/{device.id}/status",
                     )
-                    board = runtime.get("nullifierBackend") == "redpitaya-arm-c"
+                    # These backends own analysis and calibration in the engine.
+                    # Reprocessing raw display frames would bypass the E1 gate.
+                    board = runtime.get("nullifierBackend") in {
+                        "redpitaya-arm-c", "server-stream", "buffered-server-c",
+                    }
                     self.cluster_board_backend = board
                     if board:
                         from quantum_light_engine.post_processing import config_to_dict
@@ -99,6 +104,7 @@ class StreamControllerMixin:
                                     client.request, "POST",
                                     f"/api/v1/devices/{device.id}/nullifiers/commands",
                                     {"command": "configure", "config": config},
+                                    timeout_seconds=REDPITAYA_CONNECT_TIMEOUT_SECONDS,
                                 )
                         except Exception as exc:
                             with self.cluster_lock:
@@ -386,14 +392,14 @@ class StreamControllerMixin:
         if update_stats:
             self.last_stats_monotonic_ns = now
             for variable, value in (
-                (self.frames, str(received_count)),
-                (self.sequence, str(frame.sequence)),
+                (self.frames, f"{received_count:12d}"),
+                (self.sequence, f"{frame.sequence:12d}"),
                 (self.sample_rate, format_frequency(frame.sample_rate_hz).replace("Hz", "S/s")),
-                (self.samples, str(frame.samples_per_channel)),
+                (self.samples, f"{frame.samples_per_channel:12d}"),
                 (self.mask, f"0x{frame.channel_mask:x}"),
                 (self.lost1, str(frame.fpga_lost_ch1)),
                 (self.lost2, str(frame.fpga_lost_ch2)),
-                (self.lost_pair, f"{frame.fpga_lost_ch1} / {frame.fpga_lost_ch2}"),
+                (self.lost_pair, f"{frame.fpga_lost_ch1:5d} / {frame.fpga_lost_ch2:5d}"),
                 (self.flags, str(frame.flags)),
             ):
                 set_if_changed(variable, value)
@@ -463,7 +469,8 @@ class StreamControllerMixin:
         if not visible:
             return f"CH{channel} hidden"
         if value_range is not None:
-            return f"{format_voltage(value_range[0])} / {format_voltage(value_range[1])}"
+            return (f"{format_voltage(value_range[0], fixed_width=True)} / "
+                    f"{format_voltage(value_range[1], fixed_width=True)}")
         acquired = True
         if self.selected_device is not None:
             acquired = (

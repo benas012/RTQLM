@@ -102,6 +102,8 @@ class EngineClient:
                 block_size_bytes=int(item.get("blockSizeBytes") or 131_072),
                 acquisition_mode=item.get("acquisitionMode", "streaming"),
                 capture_samples=int(item.get("captureSamples", 625_024)),
+                buffered_processing=item.get("bufferedProcessing", "arm"),
+                server_stream_processing=item.get("serverStreamProcessing", False),
             )
             for item in self.request("GET", "/api/v1/devices")
             if item.get("source") == "redpitaya"

@@ -110,6 +110,23 @@ class Streaming(unittest.TestCase):
         for actual, i in zip(result["nullifiers"]["a"], range(100), strict=True):
             self.assertAlmostEqual(actual, i * 2 / math.sqrt(125e6) / 8192, places=14)
 
+    def test_fractional_bins_keep_phase_across_overlapping_continuous_windows(self) -> None:
+        self.start(windowMode="continuous", lockSeconds=0, modeSamples=None,
+                   modeWidthSeconds=308e-9, historyModes=103)
+        for start in range(0, 12000, 3000):
+            self.send(start, 3000)
+        result = self.result(5)
+        self.assertEqual((result["modeSamples"], result["modeSamplesMax"]), (38, 39))
+        self.assertAlmostEqual(result["modePeriodSeconds"], 308e-9)
+        first = (result["stream"]["results"] - 1) * 51
+        expected = []
+        for k in range(first, first + 103):
+            start, stop = (k * 77) // 2, ((k + 1) * 77) // 2
+            expected.append(sum(i // 4 for i in range(start, stop)) /
+                            (8192 * math.sqrt((stop - start) * self.rate)))
+        for actual, wanted in zip(result["nullifiers"]["a"], expected, strict=True):
+            self.assertAlmostEqual(actual, wanted, places=13)
+
     def test_connection_close_cannot_publish_queued_old_results(self) -> None:
         self.start()
         for start in range(0, 960, 96):

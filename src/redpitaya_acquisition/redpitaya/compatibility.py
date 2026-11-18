@@ -65,6 +65,8 @@ class StreamingCompatibility:
             ("adc_size", settings.adc_buffer_size_bytes, ("setADCBufferSize", "setADCSize")),
         )
         if hasattr(self.config_client, "sendConfig"):
+            if settings.require_adc_timestamps:
+                values += (("adc_capture_time", "ON", ()),)
             for key, value, _ in values:
                 serialized = str(value)
                 if self._host_specific_config and self.host is not None:

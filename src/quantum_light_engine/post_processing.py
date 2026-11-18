@@ -11,6 +11,7 @@ import numpy.typing as npt
 
 from quantum_light_engine.acquisition_windows import AcquisitionWindowGate
 from quantum_light_engine.ensemble_variance import EnsembleNullifierVariance
+from quantum_light_engine.mode_expression import evaluate_mode_expression, parse_mode_expression
 
 FloatArray: TypeAlias = npt.NDArray[np.float64]
 
@@ -67,6 +68,7 @@ class ClusterProcessingConfig:
     mode_width_seconds: float = 247e-9
     measurement_frequency_hz: float = 2.7e6
     mode_shape: str = "gaussian_linear"
+    mode_expression: str = ""
     analysis_mode: str = "cluster"
     single_channel: str = "both"
     mode_samples: int | None = None
@@ -131,6 +133,12 @@ class ClusterProcessingConfig:
             "identity", "gaussian_linear", "gaussian_linear_cosine", "lab_gaussian_linear_cosine"
         }:
             raise ValueError("unknown mode_shape")
+        if not isinstance(self.mode_expression, str):
+            raise ValueError("mode_expression must be a string")
+        if self.mode_expression:
+            parse_mode_expression(self.mode_expression)
+            if self.explicit_mode_template:
+                raise ValueError("Choose a mode function or an explicit template, not both")
         if self.analysis_mode not in {"cluster", "single"}:
             raise ValueError("analysis_mode must be cluster or single")
         if self.single_channel not in {"a", "b", "both"}:
@@ -216,8 +224,11 @@ class ClusterProcessingResult:
     variance_index_starts: Mapping[str, int] = field(default_factory=dict)
     analysis_mode: str = "cluster"
     mode_samples: int = 0
+    mode_samples_max: int = 0
     variance_window_modes: int = 0
     display_stride: int = 1
+    tagged_e1: bool = False
+    captured_modes: int = 0
 
 
 def build_gauss_lin_cos_mode(
@@ -312,6 +323,21 @@ def mode_sample_count(width_seconds: float, sample_rate_hz: float, shape: str) -
     points = width_seconds / (1 / sample_rate_hz)
     return (int(np.nextafter(points, np.inf)) if shape == "lab_gaussian_linear_cosine"
             else round(points))
+
+
+def mode_sample_step(width_seconds: float, sample_rate_hz: float) -> float:
+    """Samples per requested period; snap only floating-point integer roundoff."""
+    if any(not np.isfinite(v) or v <= 0 for v in (width_seconds, sample_rate_hz)):
+        raise ValueError("mode width and sample rate must be positive and finite")
+    step = width_seconds * sample_rate_hz
+    nearest = round(step)
+    return float(nearest) if abs(step - nearest) <= 16 * np.finfo(float).eps * max(step, 1) \
+        else step
+
+
+def mode_sample_bounds(width_seconds: float, sample_rate_hz: float) -> tuple[int, int]:
+    step = mode_sample_step(width_seconds, sample_rate_hz)
+    return int(np.floor(step)), int(np.ceil(step))
 
 
 def build_lab_mode_template(
@@ -419,6 +445,49 @@ def build_gauss_lin_mode_template(
     raw[np.abs(fine_time) >= mode_width_seconds / 2] = 0.0
     sampled = np.asarray(np.mean(raw, axis=1, dtype=np.float64), dtype=np.float64)
     return normalize_mode(sampled, dt_seconds)
+
+
+def expression_mode_templates(
+    config: ClusterProcessingConfig, sample_rate_hz: float,
+) -> tuple[float, dict[int, FloatArray]]:
+    """Sample a formula once per ADC rate, retaining fractional-bin timing.
+
+    The selected analytic shape determines the sampling convention: the lab
+    preset normalizes on a fine grid before interpolation; other shapes average
+    sub-samples of each ADC sample and normalize on the ADC grid.
+    """
+    step = (float(config.mode_samples) if config.mode_samples is not None
+            else mode_sample_step(config.mode_width_seconds, sample_rate_hz))
+    low, high = int(np.floor(step)), int(np.ceil(step))
+    if low < config.min_samples_per_mode or high > 4096:
+        raise ValueError(f"Mode function requires {config.min_samples_per_mode}-4096 "
+                         "samples in each temporal bin")
+    dt = 1 / sample_rate_hz
+    templates: dict[int, FloatArray] = {}
+    for points in {low, high}:
+        if points * config.mode_oversample > 2_000_000:
+            raise ValueError("Mode function fine grid exceeds 2 million points")
+        width = (float(np.nextafter(points / sample_rate_hz, np.inf))
+                 if low != high or config.mode_samples is not None else config.mode_width_seconds)
+        if config.mode_shape == "lab_gaussian_linear_cosine":
+            time = np.arange(0, width, dt / config.mode_oversample, dtype=np.float64)
+            raw = evaluate_mode_expression(
+                config.mode_expression, time - time[len(time) // 2], width,
+                config.measurement_frequency_hz,
+            )
+            normalized = normalize_mode(raw, dt / config.mode_oversample)
+            mode = np.interp(np.linspace(0, width, points, endpoint=False), time, normalized)
+            if low != high:
+                mode = normalize_mode(mode, dt)
+        else:
+            offsets = (np.arange(config.mode_oversample) + 0.5) / config.mode_oversample
+            time = (np.arange(points)[:, None] + offsets[None, :]) * dt - points * dt / 2
+            raw = evaluate_mode_expression(
+                config.mode_expression, time, width, config.measurement_frequency_hz,
+            )
+            mode = normalize_mode(np.mean(raw, axis=1), dt)
+        templates[points] = np.asarray(mode, dtype=np.float64)
+    return step, templates
 
 
 def rolling_variance(
@@ -615,6 +684,8 @@ class RealtimeClusterProcessor:
         self.config = config or ClusterProcessingConfig()
         self._sample_rate_hz: float | None = None
         self._mode = np.empty(0, dtype=np.float64)
+        self._mode_step = 0.0
+        self._mode_templates: dict[int, FloatArray] = {}
         self._moments = {"a": _RunningMoments(), "b": _RunningMoments()}
         self._shot_noise_coefficients: dict[str, float] = {}
         self._calibrating = False
@@ -677,6 +748,7 @@ class RealtimeClusterProcessor:
             self._current_window_id: int | None = None
             self._window_gate: AcquisitionWindowGate | None = None
             self._mode_index = 0
+            self._window_mode_index = 0
         self._quadrature_history = _empty_quadratures()
         self._history_window_ids = np.empty(0, dtype=np.int64)
         self._ensemble = self._new_ensemble()
@@ -696,10 +768,11 @@ class RealtimeClusterProcessor:
         if _segment_calibration(self.config) and self._calibrating:
             self._commit_calibration_window()
         if self.config.variance_estimator == "lab_rolling" and self._sample_rate_hz:
-            self._lab_statistics.close(self._mode.size / self._sample_rate_hz, self.calibrated)
+            self._lab_statistics.close(self._mode_step / self._sample_rate_hz, self.calibrated)
         self._pending = _empty_quadratures()
         self._delay_remaining = abs(self.config.channel_b_delay_samples)
         self._current_window_id = None
+        self._window_mode_index = 0
 
     def start_calibration(self) -> None:
         self.clear_calibration()
@@ -758,42 +831,55 @@ class RealtimeClusterProcessor:
             raise ValueError("sample_rate_hz must be positive and finite")
         if self._sample_rate_hz == sample_rate_hz and self._mode.size:
             return
-        width = (float(np.nextafter(self.config.mode_samples / sample_rate_hz, np.inf))
-                 if self.config.mode_samples is not None else self.config.mode_width_seconds)
-        if self.config.explicit_mode_template:
+        width = self.config.mode_width_seconds
+        templates: dict[int, FloatArray] = {}
+        if self.config.mode_expression:
+            step, templates = expression_mode_templates(self.config, sample_rate_hz)
+        elif self.config.explicit_mode_template:
             raw = np.asarray(self.config.explicit_mode_template, dtype=np.float64)
             if raw.size < self.config.min_samples_per_mode:
                 raise ValueError(
                     f"explicit temporal mode has {raw.size} samples; at least "
                     f"{self.config.min_samples_per_mode} are required"
                 )
-            mode = normalize_mode(raw, 1 / sample_rate_hz)
-        elif self.config.mode_shape == "identity":
-            points = self.config.mode_samples or mode_sample_count(
-                width, sample_rate_hz, self.config.mode_shape
-            )
-            if points < self.config.min_samples_per_mode:
-                raise ValueError(f"temporal mode has only {points} samples; at least "
-                                 f"{self.config.min_samples_per_mode} are required")
-            mode = normalize_mode(np.ones(points, dtype=np.float64),
-                                  1 / sample_rate_hz)
+            templates[raw.size] = normalize_mode(raw, 1 / sample_rate_hz)
+            step = float(raw.size)
         else:
-            builder = {
-                "lab_gaussian_linear_cosine": build_lab_mode_template,
-                "gaussian_linear": build_gauss_lin_mode_template,
-                "gaussian_linear_cosine": build_mode_template,
-            }[self.config.mode_shape]
-            mode = builder(
-                width, self.config.measurement_frequency_hz, 1 / sample_rate_hz,
-                oversample=self.config.mode_oversample,
-                min_samples_per_mode=self.config.min_samples_per_mode,
-            )
+            step = (float(self.config.mode_samples) if self.config.mode_samples is not None
+                    else mode_sample_step(width, sample_rate_hz))
+            low, high = int(np.floor(step)), int(np.ceil(step))
+            if low < self.config.min_samples_per_mode or high > 4096:
+                raise ValueError(f"temporal mode has only {low} samples in its shortest bin; "
+                                 f"at least {self.config.min_samples_per_mode} and at most 4096 "
+                                 "are required")
+            for points in {low, high}:
+                bin_width = (float(np.nextafter(points / sample_rate_hz, np.inf))
+                             if low != high or self.config.mode_samples is not None else width)
+                if self.config.mode_shape == "identity":
+                    mode = normalize_mode(np.ones(points, dtype=np.float64), 1 / sample_rate_hz)
+                else:
+                    builder = {
+                        "lab_gaussian_linear_cosine": build_lab_mode_template,
+                        "gaussian_linear": build_gauss_lin_mode_template,
+                        "gaussian_linear_cosine": build_mode_template,
+                    }[self.config.mode_shape]
+                    mode = builder(
+                        bin_width, self.config.measurement_frequency_hz, 1 / sample_rate_hz,
+                        oversample=self.config.mode_oversample,
+                        min_samples_per_mode=self.config.min_samples_per_mode,
+                    )
+                    if low != high:
+                        # Equal discrete white-noise gain for both bin lengths.
+                        mode = normalize_mode(mode, 1 / sample_rate_hz)
+                templates[points] = mode
         if self._sample_rate_hz is not None and self._sample_rate_hz != sample_rate_hz:
             # Changing ADC rate invalidates the integral and vacuum normalization.
             self.clear_calibration()
             self.reset_stream()
         self._sample_rate_hz = sample_rate_hz
-        self._mode = mode
+        self._mode_step = step
+        self._mode_templates = templates
+        self._mode = templates[min(templates)]
 
     def _ensure_window_gate(self, sample_rate_hz: float) -> AcquisitionWindowGate:
         if self._window_gate is None:
@@ -847,7 +933,7 @@ class RealtimeClusterProcessor:
         if not extracted_a:
             return None
         raw_quadratures = {"a": np.concatenate(extracted_a), "b": np.concatenate(extracted_b)}
-        period = self._mode.size / sample_rate_hz
+        period = self._mode_step / sample_rate_hz
         if self._calibrating:
             status = ("calibrating shot noise: "
                       f"A={self._moments['a'].count}, B={self._moments['b'].count} modes")
@@ -886,25 +972,39 @@ class RealtimeClusterProcessor:
             if values.size:
                 pending = self._pending[name]
                 self._pending[name] = np.concatenate((pending, values)) if pending.size else values
-        mode_count = min(values.size for values in self._pending.values()) // self._mode.size
+        available = min(values.size for values in self._pending.values())
+        first = self._window_mode_index
+        origin = int(np.floor(np.nextafter(first * self._mode_step, np.inf)))
+        limit = int(available / self._mode_step) + 2
+        boundaries = np.floor(np.nextafter(
+            np.arange(first, first + limit + 1, dtype=np.float64) * self._mode_step,
+            np.inf,
+        )).astype(np.int64) - origin
+        boundaries = boundaries[boundaries <= available]
+        mode_count = boundaries.size - 1
         if mode_count == 0:
             return None
-        usable = mode_count * self._mode.size
-        modes = {name: values[:usable].reshape(mode_count, self._mode.size)
-                 for name, values in self._pending.items()}
-        quadratures = {name: values @ self._mode * (1 / sample_rate_hz)
-                       for name, values in modes.items()}
+        usable = int(boundaries[-1])
+        lengths = np.diff(boundaries)
+        quadratures = {name: np.empty(mode_count, dtype=np.float64) for name in self._pending}
         threshold = self.config.gate_absolute_threshold
-        if threshold is not None:
-            valid = np.ones(mode_count, dtype=np.bool_)
-            for samples in modes.values():
-                valid &= np.all(np.isfinite(samples), axis=1)
-                valid &= np.max(np.abs(samples), axis=1) < threshold
+        valid = np.ones(mode_count, dtype=np.bool_)
+        for points, template in self._mode_templates.items():
+            selected = np.flatnonzero(lengths == points)
+            indices = boundaries[selected, None] + np.arange(points)
+            for name, values in self._pending.items():
+                samples = values[indices]
+                quadratures[name][selected] = samples @ template / sample_rate_hz
+                valid[selected] &= np.all(np.isfinite(samples), axis=1)
+                if threshold is not None:
+                    valid[selected] &= np.max(np.abs(samples), axis=1) < threshold
+        if not valid.all():
             self._rejected_modes += int(np.count_nonzero(~valid))
             for values in quadratures.values():
                 values[~valid] = np.nan
         self._pending = {name: values[usable:] for name, values in self._pending.items()}
         self._mode_index += mode_count
+        self._window_mode_index += mode_count
         return quadratures
 
     def _result(
@@ -920,6 +1020,7 @@ class RealtimeClusterProcessor:
             variance_estimator=self.config.variance_estimator,
             analysis_mode=self.config.analysis_mode,
             mode_samples=self._mode.size,
+            mode_samples_max=max(self._mode_templates),
             variance_window_modes=_variance_points(self.config, period),
             measurement_basis=self.config.measurement_basis,
             acquisition_state=self.acquisition_state,

@@ -19,7 +19,7 @@ from apps.native_receiver.settings import AppSettings
 
 
 @contextmanager
-def receiver() -> Iterator[nr.ReceiverApp]:
+def receiver(*, show_live_signal: bool = True) -> Iterator[nr.ReceiverApp]:
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(
             nr, "load_settings", lambda: AppSettings(launch_engine_on_start=False)
@@ -27,6 +27,9 @@ def receiver() -> Iterator[nr.ReceiverApp]:
         monkeypatch.setattr(nr.ReceiverApp, "refresh_devices", lambda self: None)
         monkeypatch.setattr(nr.ReceiverApp, "_ping_engine_status_async", lambda self: None)
         app = nr.ReceiverApp()
+        if show_live_signal:
+            app.show_live_signal.set(True)
+            app._update_live_signal_visibility()
         app.update()
         try:
             yield app

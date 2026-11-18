@@ -33,6 +33,8 @@ class Device:
     block_size_bytes: int
     acquisition_mode: str = "streaming"
     capture_samples: int = 625_024
+    buffered_processing: str = "arm"
+    server_stream_processing: bool = False
 
 
 @dataclass(frozen=True)
@@ -273,28 +275,6 @@ class SampleHistory:
             crossings = np.flatnonzero(matches)
             if len(crossings):
                 return chunk_lower + int(crossings[-1])
-            upper = chunk_lower - 1
-        return None
-
-    def _find_last_level_index(
-        self,
-        buffer: np.ndarray[Any, Any],
-        count: int,
-        lower: int,
-        upper: int,
-        threshold: float,
-        *,
-        above: bool,
-        chunk_size: int,
-    ) -> int | None:
-        chunk_size = max(int(chunk_size), 1)
-        while upper >= lower:
-            chunk_lower = max(lower, upper - chunk_size + 1)
-            values = self._channel_window(buffer, count, chunk_lower, upper + 1)
-            matches = values >= threshold if above else values <= threshold
-            indices = np.flatnonzero(matches)
-            if len(indices):
-                return chunk_lower + int(indices[-1])
             upper = chunk_lower - 1
         return None
 

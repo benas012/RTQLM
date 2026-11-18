@@ -206,7 +206,8 @@ class OutputSignalDialog(tk.Toplevel):
                 }
             )
         )
-        self.status.set("Preset ready. Receiver: 15.625 MS/s, lab template, B delay 0, continuous.")
+        self.status.set("Preset ready. Cancellation example: T = 256 ns, 15.625 MS/s, "
+                        "lab template, B delay 0, continuous. This does not set receiver timing.")
 
     def _apply(self) -> None:
         try:

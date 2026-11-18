@@ -39,6 +39,10 @@ profile as described in the [engine guide](src/quantum_light_engine/README.md).
 
 ## Development checks
 
+Performance benchmarks and their reports are stored in the sibling
+`../benchmarks` folder on this workstation, outside the Git repository.
+That folder's README describes the benchmark commands and application checkout settings.
+
 ```powershell
 uv run pytest -q
 uv run ruff check .

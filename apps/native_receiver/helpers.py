@@ -39,7 +39,10 @@ def editable_profile_payload(profile: dict[str, Any]) -> dict[str, Any]:
         "simulatorSeed",
     )
     return {key: profile[key] for key in keys} | {
-        key: profile[key] for key in ("acquisitionMode", "captureSamples") if key in profile
+        key: profile[key]
+        for key in ("acquisitionMode", "captureSamples", "bufferedProcessing",
+                    "measurementWindowMs", "serverStreamProcessing")
+        if key in profile
     }
 
 
@@ -244,8 +247,26 @@ def format_duration(seconds: float) -> str:
     return f"{seconds:.2f} s"
 
 
-def format_voltage(value: float) -> str:
+def format_voltage(value: float, *, fixed_width: bool = False) -> str:
+    if fixed_width:
+        return f"{format_readout(value, signed=True)} V"
     return f"{value:.3g} V"
+
+
+def format_readout(
+    value: float, *, width: int = 11, decimals: int = 3, signed: bool = False,
+) -> str:
+    """Reserve a stable numeric field, retaining very small values in scientific notation."""
+    if not np.isfinite(value):
+        return "—".rjust(width)
+    value = 0.0 if value == 0 else float(value)
+    sign = "+" if signed else ""
+    text = format(value, f"{sign}.{decimals}f")
+    if len(text) > width or (value != 0 and abs(value) < 10 ** -decimals):
+        # Leave room for a sign, decimal point, and a three-digit exponent.
+        precision = max(0, min(decimals, width - 8))
+        text = format(value, f"{sign}.{precision}e")
+    return text.rjust(width)
 
 
 def format_frequency(value: float) -> str:

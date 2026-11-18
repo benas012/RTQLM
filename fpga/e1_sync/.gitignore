@@ -1,0 +1,17 @@
+upstream/
+backup/
+captures/
+sim/xsim.dir/
+sim/.Xil/
+sim/*.log
+sim/*.jou
+sim/*.pb
+sim/*.wdb
+sim/generated_*.sv
+*.log
+*.jou
+known_hosts
+__pycache__/
+.plotdeps/
+.Xil/
+dfx_runtime.txt

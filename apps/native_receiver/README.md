@@ -52,19 +52,45 @@ controls…** contains waveform zoom, offsets, cursors and the display trigger. 
 are independent of mode collection timing. **Diagnostics** shows transport counters and voltage
 ranges. The Engine, Red Pitayas and Signal menus retain the device and advanced actions.
 
+Set **CH2 delay (samples, 0-100)** in **Setup…** or **Full settings… → Acquisition**, then
+apply the settings. The default remains **2 samples**. A value of 0 disables the offset;
+positive values pair CH1 sample `n` with CH2 sample `n + delay`. The value is saved with the
+analysis configuration and sent to the board's C processor for native analysis.
+
+Edit **Mode function (Python expression)** in the same controls. The field starts with the
+current analytic formula; for example, the lab preset is
+`t * cos(f*t) * exp(-0.5 * (2*pi*f*t)**2)`. Here `t` is centered time in seconds,
+`T` is the current bin width in seconds, and `f` is the mode bandwidth in Hz from
+**Full settings… → Temporal mode**. Use `**` for powers. Functions include `exp`, `sin`,
+`cos`, `tan`, `tanh`, `sqrt`, `log`, `log10`, `abs`, `where`, `minimum`, `maximum` and `clip`;
+`np.exp(...)` and `np.pi` also work. For a Gaussian pulse, try `exp(-0.5*(t/(T/5))**2)`.
+Blank restores the selected analytic shape. Expressions must produce finite, nonzero weights;
+imports, assignments and arbitrary Python code are rejected. Clear any explicit JSON template
+before using a custom expression.
+
+The expression is saved with the analysis settings and used for both channels. The selected
+analytic shape retains its sampling convention (lab fine-grid interpolation or ADC sub-sample
+averaging); weights are normalized automatically. Fractional-width bins receive separate sampled
+weights for each length. Applying a changed function clears shot-noise calibration, so record a
+new reference. Native C processing receives precomputed weights and requires a worker rebuilt
+from the updated sources; existing installed executables are not replaced automatically.
+
 Enter **T width (µs)** to set the temporal bin. **Samples / mode** is a read-only calculation
 from that width and the selected ADC rate; the preview also shows the actual sampled duration.
 Changing the sampling rate keeps T width and updates the count. Applying settings rejects bins
 outside the configured minimum–4096 sample range. Legacy fixed-count settings are shown as their
-equivalent width at the selected rate. The lab shape truncates the count, following the script;
-the other shapes round to the nearest sample. The sampled duration can therefore differ from T width.
+equivalent width at the selected rate. Time-based bins use consecutive boundaries on the requested
+clock, alternating the lower and upper sample counts when needed. The UI reports their average
+width and individual sampled durations. The count pattern survives ordinary packet splits.
 
-For a 308 ns mode, enter **0.308** and choose **Use 125 MS/s buffered captures** in
+For the v0.94 server stream, select **Use 62.5 MS/s server stream**. This uses
+engine-side E1-gated analysis; see the [live results and limitations](../../docs/server-stream-v094-2026-11-02.md).
+For the ARM comparison with a 308 ns mode, enter **0.308** and choose **Use 125 MS/s buffered captures** in
 Setup. This reconnects the selected board at decimation 1 and processes independent
 625,024-sample captures on its C processor. Only a 1,024-sample raw waveform preview
 and compact calculated results reach the PC. The UI labels the gaps between captures;
 its waveform history does not join separate captures. At this rate a requested 308 ns
-width gives 38 samples and an actual 304 ns bin. Disconnect restores the previous
+width gives alternating 38/39 samples (304/312 ns), averaging 308 ns. Disconnect restores the previous
 FPGA image; reconnect resumes the selected buffered mode. To return to raw continuous
 streaming, disconnect, select a suitable sidebar decimation and apply its settings.
 
@@ -96,6 +122,9 @@ The progress bar on the right shows the time remaining and changes to **Referenc
 on success. The full settings editor shares the same countdown. **Finish** stops early;
 **Clear**, changing calculation settings, or disconnecting cancels the countdown. An
 unsuccessful reference reports an error instead of marking the calibration complete.
+In tagged E1 buffered captures, reference recording uses both E1 HIGH and LOW samples;
+normal measurements admit LOW and exclude HIGH after the reference finishes. The input must
+be the shot-noise reference throughout recording.
 
 New receiver configurations default to the supplied **lab postprocessing method**: 308 ns,
 6e6 frequency parameter, Gaussian-linear-cosine weighting, lab X/P signs, per-segment vacuum

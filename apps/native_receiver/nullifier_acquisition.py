@@ -8,14 +8,17 @@ from dataclasses import replace
 from tkinter import ttk
 from typing import Any
 
+from quantum_light_engine.mode_expression import MODE_EXPRESSIONS
 from quantum_light_engine.post_processing import (
     DEFAULT_CLUSTER_P,
     DEFAULT_CLUSTER_X,
     LAB_CLUSTER_P,
     LAB_CLUSTER_X,
     ClusterProcessingConfig,
+    config_from_dict,
     config_to_dict,
-    mode_sample_count,
+    expression_mode_templates,
+    mode_sample_bounds,
 )
 
 WINDOW_CHOICES = ("Periodic", "Continuous", "Triggered")
@@ -54,27 +57,55 @@ class AnalysisControls(ttk.Frame):
         self.compact = compact
         self.sample_rate_provider = sample_rate_provider or (lambda: None)
         self._legacy_points: int | None = None
+        self._builtin_expression = MODE_EXPRESSIONS["gaussian_linear"]
         self._loading = False
-        self._mode_shape = "lab_gaussian_linear_cosine"
         self.sampling_readout = tk.StringVar(self, value="Samples / mode: select a device")
         self.variables = {
             name: tk.StringVar(self)
-            for name in ("calculation", "mode_width_us", "window_modes", "calibration", "channel")
+            for name in (
+                "calculation", "mode_width_us", "window_modes", "calibration", "channel",
+                "channel_b_delay_samples", "mode_expression",
+            )
         }
         self._field("Calculation", "calculation", 0, 0, values=CALCULATION_CHOICES, width=12)
         self._field("T width (µs)", "mode_width_us", 0, 2, width=12)
         self._field("Variance window · modes", "window_modes", 0, 4, width=7)
+        ttk.Label(self, text="CH2 delay (samples, 0-100)", style="Toolbar.TLabel").grid(
+            row=2, column=0, sticky="w", padx=(0, 12), pady=(0, 5),
+        )
+        self.delay_spinbox = ttk.Spinbox(
+            self, textvariable=self.variables["channel_b_delay_samples"],
+            from_=0, to=100, increment=1, width=8,
+        )
+        self.delay_spinbox.grid(row=3, column=0, sticky="ew", padx=(0, 12), pady=(0, 8))
         if not compact:
             self._field(
-                "Single-mode channel", "channel", 1, 0,
+                "Single-mode channel", "channel", 2, 0,
                 values=("Both", "CH1", "CH2"), width=12,
             )
             self._field(
-                "Shot-noise variance", "calibration", 1, 2,
+                "Shot-noise variance", "calibration", 2, 2,
                 values=tuple(CALIBRATION_CHOICES), width=26, columnspan=3,
             )
-        ttk.Label(self, textvariable=self.sampling_readout, style="Toolbar.TLabel",
-                   wraplength=470).grid(row=2 if compact else 4, column=0, columnspan=3,
+        expression_row = 4 if compact else 6
+        ttk.Label(self, text="Mode function (Python expression)",
+                  style="Toolbar.TLabel").grid(
+            row=expression_row, column=0, columnspan=3, sticky="w", pady=(4, 5),
+        )
+        self.mode_expression_entry = ttk.Entry(
+            self, textvariable=self.variables["mode_expression"], width=48,
+        )
+        self.mode_expression_entry.grid(
+            row=expression_row + 1, column=0, columnspan=3, sticky="ew", padx=(0, 12),
+        )
+        ttk.Label(self, text="t = centered time (s), T = bin width (s), f = bandwidth (Hz).\n"
+                  "Use ** for powers; exp, sin, cos, sqrt, abs, where and np. notation.\n"
+                  "Weights are normalized automatically. Blank restores the analytic shape.",
+                  style="Toolbar.TLabel", wraplength=470).grid(
+            row=expression_row + 2, column=0, columnspan=3, sticky="w", pady=(5, 4),
+        )
+        ttk.Label(self, textvariable=self.sampling_readout, style="Numeric.Toolbar.TLabel",
+                   wraplength=470).grid(row=expression_row + 3, column=0, columnspan=3,
                                         sticky="w", pady=(4, 4))
         self.variables["mode_width_us"].trace_add("write", self._width_changed)
 
@@ -84,7 +115,12 @@ class AnalysisControls(ttk.Frame):
             self.refresh_sampling()
 
     def set_mode_shape(self, shape: str) -> None:
-        self._mode_shape = shape
+        """Keep the displayed built-in formula in step with the shape selector."""
+        expression = self.variables["mode_expression"].get().strip()
+        previous = self._builtin_expression
+        self._builtin_expression = MODE_EXPRESSIONS[shape]
+        if not expression or expression == previous:
+            self.variables["mode_expression"].set(self._builtin_expression)
         self.refresh_sampling()
 
     def refresh_sampling(self) -> None:
@@ -101,10 +137,13 @@ class AnalysisControls(ttk.Frame):
             self._legacy_points = None
         try:
             width = float(self.variables["mode_width_us"].get()) * 1e-6
-            points = mode_sample_count(width, rate, self._mode_shape)
-            actual_us = points / rate * 1e6
+            points, maximum = mode_sample_bounds(width, rate)
+            counts = str(points) if points == maximum else f"{points}/{maximum}"
+            timing = (f"actual width: {points / rate * 1e6:.9g} µs" if points == maximum else
+                      f"average width: {width * 1e6:.9g} µs · "
+                      f"bins: {points / rate * 1e6:.9g}/{maximum / rate * 1e6:.9g} µs")
             self.sampling_readout.set(
-                f"Samples / mode: {points} · actual width: {actual_us:.9g} µs "
+                f"Samples / mode: {counts} · {timing} "
                 f"at {rate / 1000:.6g} kS/s"
             )
         except ValueError:
@@ -132,7 +171,6 @@ class AnalysisControls(ttk.Frame):
 
     def load(self, config: ClusterProcessingConfig) -> None:
         self._loading = True
-        self._mode_shape = config.mode_shape
         self._legacy_points = config.mode_samples
         self.variables["calculation"].set(
             "Single-mode" if config.analysis_mode == "single" else "Cluster"
@@ -148,33 +186,49 @@ class AnalysisControls(ttk.Frame):
         self.variables["channel"].set(
             {"both": "Both", "a": "CH1", "b": "CH2"}[config.single_channel]
         )
+        self.variables["channel_b_delay_samples"].set(str(config.channel_b_delay_samples))
+        self._builtin_expression = MODE_EXPRESSIONS[config.mode_shape]
+        self.variables["mode_expression"].set(config.mode_expression or self._builtin_expression)
         self._loading = False
         self.refresh_sampling()
 
     def apply_to(self, data: dict[str, object]) -> None:
+        try:
+            delay = int(self.variables["channel_b_delay_samples"].get())
+        except ValueError:
+            raise ValueError("CH2 delay must be a whole number from 0 to 100 samples") from None
+        if not 0 <= delay <= 100:
+            raise ValueError("CH2 delay must be a whole number from 0 to 100 samples")
         self.refresh_sampling()
         if self._legacy_points is not None:
             raise ValueError("Select a device to convert the saved sample count to a T width")
         width = float(self.variables["mode_width_us"].get()) * 1e-6
         rate = self.sample_rate_provider()
-        points = mode_sample_count(width, rate or 1.0, str(data["modeShape"]))
+        points, maximum = mode_sample_bounds(width, rate or 1.0)
         if rate is not None:
             minimum = int(data["minSamplesPerMode"])
-            if points < minimum or points > 4096:
+            if points < minimum or maximum > 4096:
                 raise ValueError(f"T width gives {points} samples / mode at {rate:g} S/s; "
                                  f"{minimum}-4096 are required. "
                                  "Change T width or the sampling rate.")
             template = data.get("explicitModeTemplate")
+            if template and points != maximum:
+                raise ValueError("An explicit template requires an integer-sample T width")
             if template and len(template) != points:
                 raise ValueError(f"The explicit template must contain {points} weights for "
                                  "the selected T width and sample rate")
         window_modes = self.variables["window_modes"].get().strip()
+        expression = self.variables["mode_expression"].get().strip()
+        if expression == self._builtin_expression:
+            expression = ""
         data.update(
             analysisMode=(
                 "single" if self.variables["calculation"].get() == "Single-mode" else "cluster"
             ),
             modeSamples=None,
             modeWidthSeconds=width,
+            channelBDelaySamples=delay,
+            modeExpression=expression,
             varianceWindowModes=None if not window_modes else int(window_modes),
             calibrationEstimator=CALIBRATION_CHOICES[self.variables["calibration"].get()],
             singleChannel={"Both": "both", "CH1": "a", "CH2": "b"}[self.variables["channel"].get()],
@@ -183,6 +237,12 @@ class AnalysisControls(ttk.Frame):
             data["varianceEstimator"] = "rolling"
             if data["varianceWindowModes"] is None:
                 data["varianceWindowModes"] = 100
+        if expression:
+            config = config_from_dict(data)
+            # Validate even before a device is selected; the actual ADC grid is
+            # checked again when acquisition starts.
+            validation_rate = rate or max(64, config.min_samples_per_mode) / width
+            expression_mode_templates(config, validation_rate)
 
 
 def acquisition_description(config: ClusterProcessingConfig) -> str:

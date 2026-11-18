@@ -1,0 +1,7 @@
+{
+  "model": "z10_125_pro_v2",
+  "bootMount": "/dev/mmcblk0p1 /opt/redpitaya ro,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro",
+  "memory": "MemTotal:         470860 kB\nMemFree:           86248 kB\nMemAvailable:     327788 kB",
+  "ethernet": "Speed: 1000Mb/s\n\tDuplex: Full\n\tLink detected: yes",
+  "cpuClock": "cpu_3or2x_div        1       1        0        333333330   0          0     50000      Y                  deviceless                      no_connection_id         \n                   cpu_3or2x         2       2        0        333333330   0          0     50000      Y                     timer@f8f00600                  no_connection_id         \n                cpu_6or4x            0       0        0        666666660   0          0     50000      Y                  deviceless                      no_connection_id"
+}

@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from dataclasses import replace
 from unittest.mock import AsyncMock, Mock
@@ -12,6 +13,39 @@ from quantum_light_engine.devices.models import DeviceProfile, DeviceProfileCrea
 from quantum_light_engine.devices.session import DeviceSession, DeviceSessionState
 from quantum_light_engine.post_processing import single_mode_processing_config
 from redpitaya_acquisition.redpitaya.output_signals import OutputSignalsConfig
+
+
+@pytest.mark.asyncio
+async def test_variance_only_capture_publishes_no_invented_waveform():
+    board = Mock(decimation=1, channel_mask=3)
+    source = BufferedCaptureSource(board)
+    calls = 0
+
+    def capture_result():
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            source.running = False
+        return {'variances': {'cluster_x': [.4]}, 'resultFields': 'variances'}
+
+    board.capture_preview.side_effect = capture_result
+    await source.start()
+    frames = source.frames()
+    with pytest.raises(StopAsyncIteration):
+        await asyncio.wait_for(anext(frames), timeout=2)
+    assert calls == 2
+
+
+def test_close_does_not_reload_an_unchanged_acquisition_image(monkeypatch):
+    board = BoardNullifierProcessor('board.local', '/processor', 1, 3, 18902)
+    board._client, board._stdin, board._stdout = Mock(), Mock(), Mock()
+    board._previous_fpga = 'v0.94'
+    board._call = Mock(return_value={'ok':True})
+    connect = Mock(side_effect=AssertionError('must not reload the current FPGA'))
+    monkeypatch.setattr('quantum_light_engine.devices.board_nullifiers.paramiko.SSHClient', connect)
+    board.close()
+    assert board._previous_fpga is None
+    connect.assert_not_called()
 
 
 def test_buffered_settings_use_the_requested_adc_rate_and_complete_capture():
@@ -49,6 +83,20 @@ async def test_preview_uses_the_original_timebase_and_keeps_captures_separate():
     await source.disconnect()
     board.prepare_capture.assert_called_once()
     board.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_tagged_preview_uses_display_stride_without_changing_adc_decimation():
+    board = Mock(decimation=1, channel_mask=3)
+    board.capture_preview.return_value = {"preview": {"a": [0, .1], "b": [.1, 0],
+                                                    "sampleStride": 2441}}
+    source = BufferedCaptureSource(board)
+    await source.start()
+    frames = source.frames()
+    frame = await anext(frames)
+    assert frame.sample_rate_hz == 125_000_000 / 2441
+    assert frame.decimation == 2441 and board.decimation == 1
+    await frames.aclose()
 
 
 @pytest.mark.asyncio

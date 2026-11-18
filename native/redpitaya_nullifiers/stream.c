@@ -156,7 +156,7 @@ static void *reader(void *unused) {
 typedef struct {
     float *a, *b;
     size_t capacity, size;
-    uint64_t epoch, revision, position, previous;
+    uint64_t epoch, revision, position, previous, first_mode;
     bool has_previous;
     bool calibrating, discard;
 } collection;
@@ -177,7 +177,7 @@ static void feed(collection *window, packet *p) {
     }
     if (p->epoch != window->epoch || processor->revision != window->revision || p->lost ||
         (window->has_previous && p->pack_id != window->previous + 1)) {
-        nf_clear_results(processor); window->size = 0; window->position = 0;
+        nf_clear_results(processor); window->size = 0; window->position = 0; window->first_mode = 0;
         window->epoch = p->epoch; window->revision = processor->revision;
         window->calibrating = processor->calibrating; window->discard = false;
     }
@@ -198,18 +198,22 @@ static void feed(collection *window, packet *p) {
     size_t delay = (size_t)abs(config->b_delay);
     size_t modes = config->history_modes;
     if (continuous && processor->calibrating) {
-        size_t reference_modes = (size_t)(0.2 * processor->sample_rate / processor->mode_size);
+        size_t reference_modes = (size_t)(0.2 * processor->sample_rate / processor->mode_step);
         if (!reference_modes) reference_modes = 1;
         if (modes > reference_modes) modes = reference_modes;
     }
-    size_t collect = continuous ? modes * processor->mode_size + delay :
+    if (continuous && modes > (size_t)((NF_MAX_CAPTURE_SAMPLES - delay) / processor->mode_step))
+        modes = (size_t)((NF_MAX_CAPTURE_SAMPLES - delay) / processor->mode_step);
+    size_t collect = continuous ?
+        nf_mode_boundary(processor, window->first_mode + modes) -
+        nf_mode_boundary(processor, window->first_mode) + delay :
         (size_t)nearbyint(config->collect_seconds * processor->sample_rate);
-    if (continuous && collect > 4194304) collect = ((4194304 - delay) / processor->mode_size) * processor->mode_size + delay;
-    if (!collect || collect > 4194304) { set_error("stream collection size exceeds its memory limit"); return; }
-    if (window->capacity != collect) {
+    if (!collect || collect > NF_MAX_CAPTURE_SAMPLES) { set_error("stream collection size exceeds its memory limit"); return; }
+    size_t capacity = continuous ? (size_t)ceil(modes * processor->mode_step) + delay : collect;
+    if (window->capacity != capacity) {
         free(window->a); free(window->b);
-        window->a = calloc(collect, sizeof(float)); window->b = calloc(collect, sizeof(float));
-        window->capacity = collect; window->size = 0;
+        window->a = calloc(capacity, sizeof(float)); window->b = calloc(capacity, sizeof(float));
+        window->capacity = capacity; window->size = 0;
         if (!window->a || !window->b) {
             free(window->a); free(window->b); window->a = window->b = NULL; window->capacity = 0;
             set_error("cannot allocate streaming collection"); return;
@@ -232,9 +236,12 @@ static void feed(collection *window, packet *p) {
                 i += skip; window->position += skip; continue;
             }
             if (window->discard) {
-                size_t phase = (position - initial_guard) % processor->mode_size;
-                if (phase) {
-                    size_t skip = processor->mode_size - phase;
+                uint64_t elapsed = position - initial_guard;
+                window->first_mode = nf_mode_count(processor, elapsed, 0);
+                uint64_t boundary = nf_mode_boundary(processor, window->first_mode);
+                if (boundary < elapsed) {
+                    boundary = nf_mode_boundary(processor, ++window->first_mode);
+                    size_t skip = boundary - elapsed;
                     if (skip > count - i) skip = count - i;
                     i += skip; window->position += skip; continue;
                 }
@@ -249,6 +256,8 @@ static void feed(collection *window, packet *p) {
                 i += skip; window->position += skip; continue;
             }
         }
+        if (continuous) collect = nf_mode_boundary(processor, window->first_mode + modes) -
+                                  nf_mode_boundary(processor, window->first_mode) + delay;
         size_t take = collect - window->size;
         if (take > count - i) take = count - i;
         float *destinations[2] = {window->a + window->size, window->b + window->size};
@@ -271,13 +280,19 @@ static void feed(collection *window, packet *p) {
             if (continuous) {
                 config->guard_seconds = 0; config->end_guard = 0;
             }
-            if (nf_process(processor, window->a, window->b, collect, error)) set_error(error);
+            if (nf_process_at(processor, window->a, window->b, collect,
+                              continuous ? window->first_mode : 0, error)) set_error(error);
             else {
                 pthread_mutex_lock(&stream.mutex); stream.results++; stream.error[0] = 0; pthread_mutex_unlock(&stream.mutex);
             }
             config->guard_seconds = guard; config->end_guard = end_guard;
-            size_t shift = continuous ?
-                (processor->calibrating ? collect - delay : ((collect / 2) / processor->mode_size) * processor->mode_size) : collect;
+            size_t shift = collect;
+            if (continuous) {
+                size_t shifted_modes = processor->calibrating ? modes : (modes / 2 ? modes / 2 : 1);
+                shift = nf_mode_boundary(processor, window->first_mode + shifted_modes) -
+                        nf_mode_boundary(processor, window->first_mode);
+                window->first_mode += shifted_modes;
+            }
             if (!shift) shift = collect;
             window->size = collect - shift;
             if (window->size) {
@@ -308,6 +323,10 @@ static void *worker(void *unused) {
 }
 
 int nf_stream_start(nf_processor *processor, unsigned port, unsigned mask, char *error) {
+    if (nf_tagged_readout(processor->config.raw_readout, NULL, NULL)) {
+        snprintf(error, NF_ERROR_SIZE, "tagged E1 requires buffered burst acquisition");
+        return -1;
+    }
     if (stream.running) {
         if (port == stream.port && mask == stream.mask) return 0;
         snprintf(error, NF_ERROR_SIZE, "stop streaming before changing its port or channel mask"); return -1;

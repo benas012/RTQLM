@@ -1,0 +1,26 @@
+{
+  "baseRelease": "Release_2026.1",
+  "baseCommit": "c3fc4f6ebebf9b24f008ecb606eb7a3a23f62422",
+  "tool": "Vivado 2025.1",
+  "part": "xc7z010clg400-1",
+  "define": "RTQLM_E1_SYNC",
+  "disabledFeatures": [
+    "DDR waveform playback to DAC outputs"
+  ],
+  "taggedAcquisitionUsesRawCounts": true,
+  "sourcePatchSha256": "35568e18ed1ae44a432d9ee6339093814af63fa608a9bfb4007cd5d9211d3af4",
+  "timingReport": "red_pitaya_top_timing_summary_postroute_physopted.rpt",
+  "routedTimingMet": true,
+  "wnsNs": 0.014,
+  "tnsNs": 0.0,
+  "setupFailingEndpoints": 0,
+  "setupEndpoints": 28288,
+  "whsNs": 0.008,
+  "artifactsSha256": {
+    "red_pitaya.bit": "3b2d39530f5308c6f9d95d80d0c1d9581d9ab503f02e3ae32101dc2672c42a1a",
+    "red_pitaya.bin": "52d4a29b6d73f402d2cacd2609e483524c84c5f0e7e34cf976a9f814d751f2d6",
+    "red_pitaya_top_timing_summary_postroute_physopted.rpt": "2dba930bda708a698f22c708e73ef0a1f74face22f390a773a6b4ed34db698d3",
+    "red_pitaya_top_utilization_placed.rpt": "1ee1acdefdb7e7c172e3bb6f48111ca2ab2aa4ac16bcc3b4d5daab0bd2a6eec2",
+    "red_pitaya_top_drc_routed.rpt": "1165b5ef07d92f1eb26fdffd8ade2dbe09c13fc79555a1fa835c94999938c1c9"
+  }
+}

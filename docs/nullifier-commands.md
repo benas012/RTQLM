@@ -60,7 +60,7 @@ formula; custom formulas remain as supplied. The basis setting selects the measu
 it does not rotate the physical homodyne measurement.
 
 The other [processing settings](nullifiers.md#custom-formulas-and-persisted-configuration) can be
-sent in the same `config` object, including mode shape, explicit template, channel delay,
+sent in the same `config` object, including mode shape, `modeExpression`, explicit template, channel delay,
 collection schedule and variance estimator. For example, this switches to continuous processing
 with a flat four-sample mode and a 100-mode rolling variance:
 

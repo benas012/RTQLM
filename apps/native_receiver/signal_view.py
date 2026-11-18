@@ -21,6 +21,7 @@ from apps.native_receiver.helpers import (
     adc_counts_to_volts,
     display_interval_ms,
     find_trigger_crossing,
+    format_readout,
     format_voltage,
     max_sample_abs,
     set_if_changed,
@@ -167,12 +168,6 @@ class SignalViewMixin:
         start = round(span * self.time_pan) if span > 0 else 0
         return start, start + visible
 
-    def _window_channel(self, samples: Any) -> Any:
-        if samples is None or len(samples) < 2:
-            return samples
-        start, end = self._window_bounds(len(samples))
-        return samples[start:end]
-
     def _window_channel_for_bounds(
         self,
         samples: Any,
@@ -292,7 +287,7 @@ class SignalViewMixin:
         start_index: int | None = None,
         end_index: int | None = None,
     ) -> None:
-        set_if_changed(self.time_zoom_label, f"{self.time_zoom:.3g}x")
+        set_if_changed(self.time_zoom_label, f"{format_readout(self.time_zoom)}x")
         set_if_changed(self.cursor_status, "Cursor center" if self.cursor_enabled else "Cursor off")
         rate = sample_rate_hz or self.axis_sample_rate_hz
         total = total_samples or self.axis_samples_per_channel
@@ -303,8 +298,9 @@ class SignalViewMixin:
             ms_per_div = visible / rate * 1000 / 10
             start_ms = start_index / rate * 1000
             end_ms = end_index / rate * 1000
-            set_if_changed(self.timebase, f"{ms_per_div:.3g} ms/div")
-            set_if_changed(self.time_window_label, f"{start_ms:.3g}-{end_ms:.3g} ms")
+            set_if_changed(self.timebase, f"{format_readout(ms_per_div)} ms/div")
+            set_if_changed(self.time_window_label,
+                           f"{format_readout(start_ms)}-{format_readout(end_ms)} ms")
         else:
             set_if_changed(self.timebase, "- ms/div")
             set_if_changed(self.time_window_label, "Full capture")
@@ -541,7 +537,8 @@ class SignalViewMixin:
         edge_symbol = "↑" if self.trigger_edge.get() == "Rising" else "↓"
         set_if_changed(
             self.trigger_status,
-            f"Armed {self.trigger_channel.get()} {edge_symbol} {format_voltage(level)}",
+            f"Armed {self.trigger_channel.get()} {edge_symbol} "
+            f"{format_voltage(level, fixed_width=True)}",
         )
         self.status.set("voltage trigger armed")
         self._ui_log(

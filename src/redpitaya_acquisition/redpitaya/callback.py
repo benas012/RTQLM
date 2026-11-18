@@ -93,6 +93,8 @@ def create_synchronous_callback(
                 channel_pack_mismatch = _field(meta_1, "packId", 0) != _field(meta_2, "packId", 0)
                 if _sample_rate(meta_1, settings) != _sample_rate(meta_2, settings):
                     raise ValueError("channel sample rates do not match")
+                if _field(meta_1, "timeCapture", 0) != _field(meta_2, "timeCapture", 0):
+                    raise ValueError("channel acquisition timestamps do not match")
             meta = meta_1 if channel_1 is not None else meta_2
             pack_id = int(_field(meta, "packId", _field(pack, "packId", 0)))
             packet_gap = (
@@ -114,6 +116,7 @@ def create_synchronous_callback(
                 sequence=0,
                 source_pack_id=pack_id,
                 captured_at_unix_ns=time.time_ns(),
+                adc_capture_unix_ns=int(_field(meta, "timeCapture", 0)),
                 base_rate_hz=round(sample_rate * settings.decimation),
                 decimation=settings.decimation,
                 sample_rate_hz=sample_rate,

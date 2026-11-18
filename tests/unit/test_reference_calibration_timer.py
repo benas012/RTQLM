@@ -80,7 +80,8 @@ def test_reference_finishes_once_at_ten_seconds_with_real_collected_modes(calibr
     app.tick()
     assert app.cluster_processor.calibrating
     assert app.calibration_progress.get() == pytest.approx(9.9)
-    assert app.calibration_text.get() == "Recording · 0.1 s left"
+    assert app.calibration_text.get() == "Recording ·  0.1 s left"
+    assert len(app.calibration_text.get()) == len("Recording · 10.0 s left")
     clock[0] = 110
     app.tick()
     assert app.cluster_processor.calibrated

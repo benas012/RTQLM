@@ -12,6 +12,7 @@ from apps.native_receiver.constants import (
 from apps.native_receiver.helpers import (
     draw_channel,
     format_duration,
+    format_readout,
     format_voltage,
     set_if_changed,
     update_trace_line,
@@ -252,7 +253,8 @@ class WaveformRendererMixin:
             set_if_changed(
                 self.trigger_status,
                 f"Triggered {self.trigger_channel.get()} {edge_symbol} "
-                f"{format_voltage(trigger_level)} · {format_duration(visible_seconds)}",
+                f"{format_voltage(trigger_level, fixed_width=True)} · "
+                f"{format_duration(visible_seconds):>10}",
             )
         else:
             self._hide_trigger_lines()
@@ -271,10 +273,11 @@ class WaveformRendererMixin:
             )
             if sample_rate_hz > 0:
                 cursor_ms = (start_index + visible_samples / 2) / sample_rate_hz * 1000
-                readout = [f"t {cursor_ms:.4g} ms"]
+                readout = [f"t {format_readout(cursor_ms)} ms"]
                 for label, values in (("CH1", plot_channel_1), ("CH2", plot_channel_2)):
                     if values is not None and len(values):
-                        readout.append(f"{label} {format_voltage(float(values[len(values) // 2]))}")
+                        voltage = float(values[len(values) // 2])
+                        readout.append(f"{label} {format_voltage(voltage, fixed_width=True)}")
                 self.trace_items.append(
                     self.canvas.create_text(
                         cursor_x + 8,

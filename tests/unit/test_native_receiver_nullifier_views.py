@@ -78,6 +78,8 @@ def test_uncalibrated_chart_displays_variance_and_calibrated_chart_displays_db()
     assert unit == "dB relative to shot noise"
     assert logarithmic
     assert select_nullifier_traces(calibrated, "Amplitude")[0] is calibrated.nullifiers
+    traces, unit, logarithmic = select_nullifier_traces(calibrated, "Quadratures")
+    assert traces is calibrated.quadratures and unit == "mode quadrature" and not logarithmic
 
 
 def test_basis_change_switches_builtin_formula_and_preserves_custom_formulas() -> None:
@@ -117,8 +119,19 @@ def test_receiver_defaults_to_requested_lock_collect_cycle(
     assert config.nullifiers == (LAB_CLUSTER_X,)
     assert config.variance_estimator == "lab_rolling"
     assert config.history_modes == 25_000
+    assert config.channel_b_delay_samples == 2
     assert "5 ms lock" in acquisition_description(config)
     assert "5 ms collect" in acquisition_description(config)
+
+
+@pytest.mark.parametrize("delay", [0, 2, 100])
+def test_channel_delay_survives_receiver_reload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, delay: int,
+) -> None:
+    monkeypatch.setattr(settings, "CLUSTER_CONFIG_PATH", tmp_path / "cluster.json")
+    config = replace(lab_processing_config(), channel_b_delay_samples=delay)
+    settings.save_cluster_config(config)
+    assert settings.load_cluster_config() == config
 
 
 def test_saved_custom_timing_and_formulas_survive_receiver_reload(

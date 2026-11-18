@@ -135,7 +135,8 @@ but is not an optical vacuum reference or an indefinitely fresh random source.
 ## Nullifier loopback test
 
 Connect OUT1 to IN1 and OUT2 to IN2 with matched cables. Use the receiver's lab preset with basis X,
-ADC rate 15.625 MS/s, B delay 0, continuous collection and Rolling modes. Keep the uncalibrated graph
+ADC rate 15.625 MS/s, **T width 256 ns**, B delay 0, continuous collection and Rolling modes.
+Keep the uncalibrated graph
 for this electrical test.
 
 In the output editor choose **Lab X cancellation preset**, then Apply:
@@ -148,7 +149,7 @@ In the output editor choose **Lab X cancellation preset**, then Apply:
 | DC offset | 0 V | 0 V |
 | Phase | 0 degrees | -90 degrees |
 
-The current lab extraction uses four ADC points per mode, or 256 ns at this ADC rate. The sine
+This example uses four ADC points per mode, or 256 ns at this ADC rate. The sine
 advances by a quarter cycle per mode. The lab X row
 `A[k] + A[k+1] + B[k] - B[k+1]` cancels ideally with the -90 degree B phase. The variance should
 fall toward the electronics/mismatch floor. Change B to +90 degrees: variance should rise.

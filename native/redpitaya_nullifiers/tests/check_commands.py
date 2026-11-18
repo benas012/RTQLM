@@ -50,6 +50,61 @@ def invoke(*commands: dict | str) -> list[dict]:
 
 
 class NativeCommands(unittest.TestCase):
+    def test_variance_only_preserves_values_and_excludes_samples(self) -> None:
+        samples = modes([float(i % 7) for i in range(40)])
+        full = invoke(configure(), capture(samples))[-1]
+        request = {**capture(samples), "resultFields":"variances"}
+        reduced = invoke(configure(), request,
+                         {"command":"latest", "resultFields":"variances"})
+        for reply in reduced[1:]:
+            self.assertTrue(reply["ok"], reply)
+            self.assertEqual(reply["resultFields"], "variances")
+            for key in ("quadratures", "nullifiers", "preview"):
+                self.assertNotIn(key, reply)
+            for key in ("variances", "varianceCounts", "squeezingDb", "displayStride"):
+                self.assertEqual(reply[key], full[key])
+
+    def test_variance_only_rejects_preview_and_invalid_fields(self) -> None:
+        for extra in ({"resultFields":"variances", "previewPoints":16},
+                      {"resultFields":"invalid"}, {"resultFields":True}):
+            reply = invoke(configure(), {**capture(modes([1.,2.,3.,4.])), **extra})[-1]
+            self.assertFalse(reply["ok"])
+
+    def test_serialization_buffer_grows_reuses_and_handles_smaller_results(self) -> None:
+        rows = [{"name": f"row_{i}", "terms": [{"source": "a"}]} for i in range(16)]
+        signal = [float(i % 251) for i in range(16384)]
+        replies = invoke(configure(modeSamples=2, historyModes=16384, nullifiers=rows),
+                         capture(signal), capture(signal), capture(signal[:16]))
+        self.assertTrue(all(reply["ok"] for reply in replies), replies[0])
+        self.assertGreater(len(json.dumps(replies[1])), 1_000_000)
+        for field in ("quadratures", "nullifiers", "variances", "varianceCounts"):
+            self.assertEqual(replies[1][field], replies[2][field])
+        self.assertEqual(len(replies[1]["quadratures"]["a"]), 8192)
+        self.assertEqual(len(replies[3]["quadratures"]["a"]), 8)
+        self.assertAlmostEqual(replies[3]["quadratures"]["a"][0], 1 / math.sqrt(2 * RATE))
+
+    def test_acquisition_gate_and_readout_settings_are_validated(self) -> None:
+        good = invoke(configure(acquisitionGatePin="DIO3_N", acquisitionGatePollUs=100,
+                                rawReadout="ram_copy"))[0]
+        self.assertTrue(good["ok"], good)
+        self.assertEqual(good["config"]["acquisitionGatePin"], "DIO3_N")
+        self.assertEqual(good["config"]["rawReadout"], "ram_copy")
+        for settings in ({"acquisitionGatePin": "3"}, {"acquisitionGatePin": False},
+                         {"acquisitionGatePollUs": 0}, {"acquisitionGatePollUs": 49},
+                         {"acquisitionGatePollUs": 500.5}, {"acquisitionGatePollUs": 1000001},
+                         {"rawReadout": "unknown"}):
+            with self.subTest(settings=settings):
+                self.assertFalse(invoke(configure(**settings))[0]["ok"])
+
+    def test_50ms_measurement_configuration_and_limits(self) -> None:
+        reply = invoke(configure(captureSamples=6250048, measurementSamples=6250000,
+                                 historyModes=200000, acquisitionGatePin="DIO0_P"))[0]
+        self.assertTrue(reply["ok"], reply)
+        self.assertEqual(reply["config"]["measurementSamples"], 6250000)
+        for update in ({"captureSamples":8388672}, {"historyModes":262145},
+                       {"measurementSamples":6250050, "captureSamples":6250048}):
+            self.assertFalse(invoke(configure(**update))[0]["ok"])
+
     def assert_close(self, actual: list, expected: list, places: int = 12) -> None:
         self.assertEqual(len(actual), len(expected))
         for observed, wanted in zip(actual, expected, strict=True):
@@ -93,6 +148,20 @@ class NativeCommands(unittest.TestCase):
         for key in ('nullifiers', 'variances', 'varianceCounts'):
             self.assert_close(compact[key]['custom'], full[key]['custom'][::7], places=15)
             self.assertEqual(again[key], full[key])
+
+    def test_repeated_snapshots_preserve_owned_spare_mode_buffers(self) -> None:
+        signal = modes([1, 2, 4, 8, 16, 32, 16, 8] * 4)
+        replies = invoke(configure(), capture(signal), capture(signal),
+                         {"command": "latest"}, {"command": "latest"},
+                         capture(signal), {"command": "reset"},
+                         capture(signal), {"command": "latest"})
+        self.assertTrue(all(reply["ok"] for reply in replies), replies)
+        # A second capture populates the reusable spare buffers. Snapshots own
+        # their result copies; releasing them must leave those live spares usable.
+        expected = replies[2]
+        for actual in (replies[3], replies[4], replies[5], replies[7], replies[8]):
+            for key in ("quadratures", "nullifiers", "variances", "varianceCounts"):
+                self.assertEqual(actual[key], expected[key])
 
     def test_stable_sliding_variance_with_a_large_offset(self) -> None:
         signal = [struct.unpack('f', struct.pack('f', 10000 + math.sin(i * 0.3)))[0]

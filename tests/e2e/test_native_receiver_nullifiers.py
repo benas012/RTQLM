@@ -4,7 +4,8 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import font as tkfont
+from tkinter import messagebox, ttk
 
 import numpy as np
 import pytest
@@ -13,6 +14,7 @@ from apps.native_receiver import native_receiver as receiver
 from apps.native_receiver import receiver_tools
 from apps.native_receiver.cluster_monitor import ClusterMonitorDialog
 from apps.native_receiver.native_receiver import ReceiverApp
+from quantum_light_engine.devices.board_nullifiers import BoardNullifierProcessor
 from quantum_light_engine.post_processing import (
     LAB_CLUSTER_P,
     LAB_CLUSTER_X,
@@ -45,6 +47,7 @@ def check_nullifier_tabs() -> None:
             assert app.analysis_notebook.tab(0, "text") == "Spectrum analyzer"
             assert app.analysis_notebook.tab(1, "text") == "Mode analysis"
             assert app.analysis_notebook.select() == str(panel)
+            assert panel.analysis.variables["channel_b_delay_samples"].get() == "2"
             for geometry in ("1180x760", "960x640", "1600x1000"):
                 app.geometry(geometry)
                 app.update()
@@ -62,6 +65,35 @@ def check_nullifier_tabs() -> None:
                 app.update()
                 bottom = panel.winfo_rooty() - app.winfo_rooty() + panel.winfo_height()
                 assert bottom <= app.winfo_height()
+            # The setup control applies both endpoints and forwards the value to C.
+            board = BoardNullifierProcessor("board.local", "/root/processor", 1, 3, 18902)
+            for delay in (0, 100, 2):
+                panel.analysis.variables["channel_b_delay_samples"].set(str(delay))
+                panel._apply()
+                config = app.cluster_processor.config
+                assert config.channel_b_delay_samples == delay
+                assert board._settings(config)["channelBDelaySamples"] == delay
+            for invalid in ("-1", "101", "2.5", "", "abc"):
+                panel.analysis.variables["channel_b_delay_samples"].set(invalid)
+                with pytest.raises(ValueError, match=r"CH2 delay.*0 to 100"):
+                    panel._selected_config()
+                assert app.cluster_processor.config.channel_b_delay_samples == 2
+            panel.analysis.variables["channel_b_delay_samples"].set("2")
+            # Custom functions apply in Setup, synchronize to full settings, and
+            # are validated before replacing the active configuration.
+            expression = "np.exp(-0.5*(t/(T/5))**2)"
+            panel.analysis.variables["mode_expression"].set(expression)
+            panel._apply()
+            assert app.cluster_processor.config.mode_expression == expression
+            assert len(board._settings(app.cluster_processor.config)["sampledModeTemplates"]) == 2
+            for invalid in ("__import__('os')", "t +", "0", "1/t"):
+                panel.analysis.variables["mode_expression"].set(invalid)
+                with pytest.raises(ValueError):
+                    panel._selected_config()
+                assert app.cluster_processor.config.mode_expression == expression
+            panel.analysis.variables["mode_expression"].set("")
+            panel._apply()
+            assert app.cluster_processor.config.mode_expression == ""
             # A live chart retains its Canvas items and axes as batches change.
             modes = np.linspace(-4, -1, 2000)
             result = ClusterProcessingResult(
@@ -72,13 +104,35 @@ def check_nullifier_tabs() -> None:
                 analysis_mode="single", mode_samples=16, variance_window_modes=100,
             )
             panel._update_metrics(result)
-            assert panel.metric_values[0].get() == "-1.00 dB"
+            assert panel.metric_values[0].get() == "    -1.00 dB"
             assert panel.metric_values[1].get() == "—"
-            assert panel.mode_summary.get() == "16 samples / mode\n1 µs / mode"
+            assert panel.mode_summary.get() == "  16 samples / mode\n    1.000 µs / mode"
             panel.plot_choice.set("Variance")
             panel._update_metrics(result)
-            assert panel.metric_values[0].get() == "1"
+            assert panel.metric_values[0].get() == "      1.000"
             assert "variance" in panel.metric_titles[0].get()
+            # Changing digits, signs and notation must not move the reading cards
+            # or the reference controls, even when the second channel has no data.
+            metric_frame = panel.winfo_children()[1]
+            cards = metric_frame.winfo_children()
+            def reading_layout():
+                app.update_idletasks()
+                return [(card.winfo_x(), card.winfo_y(), card.winfo_width(),
+                         card.winfo_height()) for card in cards]
+            original_layout = reading_layout()
+            for choice, values in (
+                ("Variance", (0.0, 0.001, 0.00000012, 9.999, 10.001, 123456789.0)),
+                ("Squeezing (dB)", (-12.34, -0.01, 0.0, 0.01, 9.99, 10.01)),
+            ):
+                panel.plot_choice.set(choice)
+                for value in values:
+                    panel._update_metrics(replace(
+                        result, variances={"CH1": np.array([value])},
+                        squeezing_db={"CH1": np.array([value])},
+                    ))
+                    assert reading_layout() == original_layout
+            metric_font = tkfont.Font(root=app, font=ttk.Style(app).lookup("Hero.TLabel", "font"))
+            assert len({metric_font.measure(digit) for digit in "0123456789+-"}) == 1
             panel.plot_choice.set("Auto")
             panel._draw_result(result)
             grid = panel.canvas.find_withtag("grid:0")
@@ -118,6 +172,26 @@ def check_nullifier_tabs() -> None:
             assert panel.canvas.find_withtag("grid:0") == grid
             assert panel.canvas.itemcget(grid, "state") == "normal"
             np.testing.assert_array_equal(result.squeezing_db["CH1"], modes)
+            # Full record time is retained: 5 ms HIGH/5 ms LOW creates two
+            # separate traces, with no connecting line or stale result in HIGH.
+            panel._clear_plot_view()
+            mask = np.tile(np.r_[np.ones(500), np.full(500, np.nan)], 2)
+            gated = replace(result, tagged_e1=True, captured_modes=2000,
+                            rejected_modes=1000, mode_period_seconds=1e-5,
+                            variance_estimator="lab_rolling", variances={"CH1":mask})
+            panel.plot_choice.set("Variance")
+            panel._draw_result(gated)
+            assert panel._plot_view_modes == 2000
+            first_run = panel.canvas.find_withtag("trace:CH1:0:0")
+            second_run = panel.canvas.find_withtag("trace:CH1:1:0")
+            assert first_run and second_run
+            assert max(panel.canvas.coords(first_run)[::2]) < min(
+                panel.canvas.coords(second_run)[::2])
+            panel._draw_result(replace(gated, rejected_modes=2000,
+                                       variances={"CH1":np.full(2000, np.nan)}))
+            assert panel.canvas.itemcget(first_run, "state") == "hidden"
+            assert "E1 HIGH" in panel.readout.get()
+            panel.plot_choice.set("Auto")
             # Clearing calibration also invalidates a held chart of the old reference.
             app.clear_cluster_calibration()
             assert panel._last_chart_result is None
@@ -169,6 +243,22 @@ def check_nullifier_tabs() -> None:
             assert dialog._config().nullifiers == custom.nullifiers
             assert dialog._config().history_modes == custom.history_modes
             assert dialog._config().variance_estimator == custom.variance_estimator
+            for delay in (0, 100, 2):
+                dialog.analysis.variables["channel_b_delay_samples"].set(str(delay))
+                dialog._apply()
+                assert app.cluster_processor.config.channel_b_delay_samples == delay
+                assert panel.analysis.variables["channel_b_delay_samples"].get() == str(delay)
+            dialog.mode_shape.set("identity")
+            assert dialog.analysis.variables["mode_expression"].get() == "1"
+            dialog.analysis.variables["mode_expression"].set(expression)
+            dialog.mode_shape.set("gaussian_linear")
+            assert dialog.analysis.variables["mode_expression"].get() == expression
+            dialog._apply()
+            assert panel.analysis.variables["mode_expression"].get() == expression
+            dialog._load_single_preset()
+            assert dialog._config().mode_expression == expression
+            panel._single_preset()
+            assert app.cluster_processor.config.mode_expression == expression
             dialog._load_preset()
             loaded = dialog._config()
             assert loaded.mode_shape == "lab_gaussian_linear_cosine"

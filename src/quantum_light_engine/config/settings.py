@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,6 +29,18 @@ class EngineSettings(BaseSettings):
     shutdown_timeout_seconds: float = Field(default=10.0, gt=0)
     trigger_ssh_password: SecretStr | None = None
     native_nullifier_enabled: bool = False
+    native_nullifier_auto_install: bool = True
+    buffered_board_executable: str = "/root/rtqlm-nullifiers/current/build/rp-buffered-board"
+    buffered_server_command: list[str] = Field(default_factory=lambda: ["rp-buffered-server"])
+    buffered_binary_port: int = Field(default=18903, ge=1024, le=65535)
+    buffered_ssh_known_hosts: Path | None = None
+    buffered_ssh_password: SecretStr | None = None
+    buffered_transport: Literal["tcp", "ssh"] = "tcp"
+    buffered_display: Literal["variances", "all"] = "variances"
+    buffered_arm_readout: Literal[
+        "ram_copy", "direct_dma", "e1_direct", "e1_bulk", "e1_tile16", "e1_tile64",
+        "e1_tile256", "e1_tile64x2",
+    ] = "ram_copy"
     native_nullifier_executable: str = "/root/rtqlm-nullifiers/current/build/rp-nullifierd"
     native_nullifier_port: int = Field(default=18902, ge=1024, le=65535)
     native_nullifier_hosts: list[str] = Field(default_factory=list)
