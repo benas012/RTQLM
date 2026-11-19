@@ -1,0 +1,350 @@
+diff --git a/prj/v0.94/rtl/red_pitaya_top.sv b/prj/v0.94/rtl/red_pitaya_top.sv
+index 040758e..d57522e 100644
+--- a/prj/v0.94/rtl/red_pitaya_top.sv
++++ b/prj/v0.94/rtl/red_pitaya_top.sv
+@@ -157,6 +157,10 @@ logic [ 3-1:0] daisy_mode;
+ logic          trig_ext;
+ logic          trig_output_sel;
+ logic          trig_asg_out;
++`ifdef RTQLM_E1_SYNC
++logic [31:0] e1_control;
++logic [15:0] e1_word_a, e1_word_b;
++`endif
+ logic [ 4-1:0] trig_ext_asg01;
+ 
+ 
+@@ -490,6 +494,9 @@ red_pitaya_hk #(.DWE(DWE)) i_hk (
+   .fclk_i          (fclk[0]    ),  // clock
+   .frstn_i         (frstn[0]   ),  // reset - active low
+ 
++`ifdef RTQLM_E1_SYNC
++  .e1_control_o(e1_control),
++`endif
+   // LED
+   .led_o           (  led_o    ),  // LED output
+   // global configuration
+@@ -566,6 +573,11 @@ wire [16-1:0] adc_state_ch_2_3 = 16'h0;
+ wire [16-1:0] axi_state_ch_0_1;
+ wire [16-1:0] axi_state_ch_2_3 = 16'h0;
+ 
++`ifdef RTQLM_E1_SYNC
++rp_e1_tag e1_tag (.clk(adc_clk), .rstn(adc_rstn), .e1_i(exp_p_in[0]),
++  .adc_a_i(adc_dat[0][13:0]), .adc_b_i(adc_dat[1][13:0]),
++  .control_i(e1_control), .word_a_o(e1_word_a), .word_b_o(e1_word_b));
++`endif
+ localparam int unsigned SCOPE_DW = 16;
+ logic signed [SCOPE_DW-1:0] adc_scope_dat [MNA-1:0];
+ for (genvar i = 0; i < MNA; i++) begin : scope_adc_ext
+@@ -580,6 +592,10 @@ rp_scope_com #(
+   .RSZ(14))
+   i_scope (
+   // ADC
++`ifdef RTQLM_E1_SYNC
++  .e1_enable_i(e1_control[0]),
++  .e1_tagged_dat_i({e1_word_b, e1_word_a}),
++`endif
+   .adc_dat_i     ({adc_scope_dat[1], adc_scope_dat[0]}  ),
+   .adc_clk_i     ({2{adc_clk}}  ),  // clock
+   .adc_rstn_i    ({2{adc_rstn}} ),  // reset - active low
+diff --git a/prj/v0.94/sdc/red_pitaya.xdc b/prj/v0.94/sdc/red_pitaya.xdc
+index 6cec53f..270e7d5 100644
+--- a/prj/v0.94/sdc/red_pitaya.xdc
++++ b/prj/v0.94/sdc/red_pitaya.xdc
+@@ -72,3 +72,6 @@ set_false_path -from [get_pins sys_bus_interconnect/for_bus[*].inst_sys_bus_cdc/
+ set_max_delay -datapath_only 8.000 -from [get_pins i_hk/i_freq_meter/ref_gate_reg/C] -to [get_pins {i_hk/i_freq_meter/mes_gate_csff*[0]/D}]
+ set_false_path -from [get_pins {adc_dat*[*][*]/C}] -to [get_pins {dac_dat_*[*]/D}]
+ set_false_path -from [get_pins {i_adc366x/adc_dat_o*[*]/C}] -to [get_pins {dac_dat_*[*]/D}]
++
++# RTQLM: asynchronous E1 input; subsequent synchronizer stages are timed normally.
++set_false_path -to [get_pins -hier -filter {NAME =~ *e1_tag/e1_meta_reg/D}]
+diff --git a/red_pitaya_vivado_Z10.tcl b/red_pitaya_vivado_Z10.tcl
+index 73c5a85..5ea104c 100644
+--- a/red_pitaya_vivado_Z10.tcl
++++ b/red_pitaya_vivado_Z10.tcl
+@@ -25,7 +25,7 @@ foreach item $argv {
+ # install UltraFast Design Methodology from TCL Store
+ ################################################################################
+ 
+-tclapp::install -quiet ultrafast
++# Optional ultrafast Tcl app is not required for bitstream generation.
+ 
+ ################################################################################
+ # define paths
+@@ -153,6 +153,7 @@ update_compile_order -fileset sources_1
+ 
+ if {$dev_mode == 1} {return}
+ 
++set_property STEPS.SYNTH_DESIGN.ARGS.RESOURCE_SHARING off [get_runs synth_1]
+ launch_runs synth_1
+ wait_on_run synth_1
+ 
+@@ -165,6 +166,7 @@ file copy -force $rptFiles ./$path_out/
+ # write checkpoint design
+ ################################################################################
+ 
++set_property strategy Performance_ExplorePostRoutePhysOpt [get_runs impl_1]
+ launch_runs impl_1
+ wait_on_run impl_1
+ 
+diff --git a/rtl/rtl/classic/red_pitaya_asg_ch.sv b/rtl/rtl/classic/red_pitaya_asg_ch.sv
+index 09c78f4..5120fe1 100644
+--- a/rtl/rtl/classic/red_pitaya_asg_ch.sv
++++ b/rtl/rtl/classic/red_pitaya_asg_ch.sv
+@@ -210,6 +210,11 @@ wire             ext_trig_n   ;
+ 
+ reg  [  16-1: 0] rep_cnt      ;
+ reg  [  32-1: 0] dly_cnt      ;
++`ifdef RTQLM_E1_SYNC
++// Keep independent -1 results; a late trigger must select AFTER arithmetic.
++(* keep = "true" *) wire [31:0] e1_delay_load = (set_rdly_i > 0) ? set_rdly_i - 32'd1 : 32'd0;
++(* keep = "true" *) wire [31:0] e1_delay_dec = dly_cnt - 32'd1;
++`endif
+ // Set after the first real output sample so AXI preload time is not counted
+ // as part of the requested start-to-start burst period.
+ reg              dly_started  ;
+@@ -299,9 +304,17 @@ always @(posedge dac_clk_i) begin
+          dly_started <= 1'b0;
+       end else begin
+          if (dly_start)
++`ifdef RTQLM_E1_SYNC
++            dly_cnt <= e1_delay_load;
++`else
+             dly_cnt <= (set_rdly_i > 32'h0) ? (set_rdly_i - 32'h1) : 32'h0;
++`endif
+          else if (dac_rep && dly_started && |dly_cnt)
++`ifdef RTQLM_E1_SYNC
++            dly_cnt <= e1_delay_dec;
++`else
+             dly_cnt <= dly_cnt - 32'h1;
++`endif
+ 
+          if (dly_start)
+             dly_started <= 1'b1;
+@@ -363,7 +376,21 @@ wire dac_trig_axi  = (!dac_rep && trig_in) || (rep_arm && (rep_idle || rep_end_p
+ 
+ assign dac_trig = (!dac_rep && trig_in) || (rep_arm && (rep_idle || rep_end)) ;
+ 
++`ifdef RTQLM_E1_SYNC
++wire [PNT_SIZE:0] e1_pnt = {1'b0,dac_pnt};
++wire [PNT_SIZE:0] e1_step = {1'b0,set_step[RSZ+15:0],set_step_lo};
++wire [PNT_SIZE:0] e1_size_inv = ~{1'b0,set_size_i,32'h0};
++wire [PNT_SIZE:0] e1_wrap_sum = e1_pnt ^ e1_step ^ e1_size_inv;
++wire [PNT_SIZE:0] e1_wrap_carry = ((e1_pnt & e1_step) | (e1_pnt & e1_size_inv) | (e1_step & e1_size_inv)) << 1;
++wire [PNT_SIZE:0] e1_next, e1_wrap, e1_idle_wrap;
++rp_e1_fast_add #(.W(PNT_SIZE+1)) e1_add_wrap (.a(e1_wrap_sum), .b(e1_wrap_carry), .sum(e1_wrap));
++rp_e1_fast_add #(.W(PNT_SIZE+1)) e1_add_next (.a(e1_pnt), .b(e1_step), .sum(e1_next));
++rp_e1_fast_add #(.W(PNT_SIZE+1)) e1_add_idle (.a(e1_pnt), .b(e1_size_inv), .sum(e1_idle_wrap));
++assign dac_npnt = dac_do ? e1_next : e1_pnt;
++assign dac_npnt_sub = dac_do ? e1_wrap : e1_idle_wrap;
++`else
+ assign dac_npnt_sub = dac_npnt - {1'b0,set_size_i,32'h0} - 1;
++`endif
+ assign dac_npnt_sub_neg = dac_npnt_sub[PNT_SIZE];
+ 
+ // read pointer logic
+@@ -379,7 +406,9 @@ end else begin
+    end
+ end
+ 
++`ifndef RTQLM_E1_SYNC
+ assign dac_npnt = dac_do ? dac_pnt + {set_step[RSZ+15:0],set_step_lo} : dac_pnt;
++`endif
+ assign trig_done_o = !dac_rep && trig_in;
+ // output frequency on trigger
+ assign get_step_o = set_step;
+diff --git a/rtl/rtl/classic/red_pitaya_hk.v b/rtl/rtl/classic/red_pitaya_hk.v
+index 899eb10..6aee2eb 100644
+--- a/rtl/rtl/classic/red_pitaya_hk.v
++++ b/rtl/rtl/classic/red_pitaya_hk.v
+@@ -38,6 +38,10 @@ module red_pitaya_hk #(
+   input                fclk_i     ,  // clock
+   input                frstn_i    ,  // reset - active low
+ 
++  // RTQLM E1 capture configuration
++`ifdef RTQLM_E1_SYNC
++  output reg [31:0] e1_control_o,
++`endif
+   // LED
+   output reg [DWL-1:0] led_o      ,  // LED output
+   // global configuration
+@@ -157,6 +161,9 @@ freq_meter #(
+ 
+ always @(posedge clk_i)
+ if (rstn_i == 1'b0) begin
++`ifdef RTQLM_E1_SYNC
++  e1_control_o <= 32'h00000500;
++`endif
+   digital_loop <= 2'h0;
+   daisy_mode_o <= 3'h0;
+   led_o        <= {DWL{1'b0}};
+@@ -166,6 +173,9 @@ if (rstn_i == 1'b0) begin
+   exp_n_dir_o  <= {DWE{1'b0}};
+   can_on_o     <= 1'b0;
+ end else if (sys_wen) begin
++`ifdef RTQLM_E1_SYNC
++  if (sys_addr[19:0]==20'h00114) e1_control_o <= sys_wdata;
++`endif
+   if (sys_addr[19:0]==20'h0c)   digital_loop <= sys_wdata[1:0];
+ 
+   if (sys_addr[19:0]==20'h10)   exp_p_dir_o  <= sys_wdata[DWE-1:0];
+@@ -190,6 +200,10 @@ end else begin
+   sys_err <= 1'b0;
+ 
+   casez (sys_addr[19:0])
++`ifdef RTQLM_E1_SYNC
++    20'h00110: begin sys_ack <= sys_en; sys_rdata <= 32'h45513101; end
++    20'h00114: begin sys_ack <= sys_en; sys_rdata <= e1_control_o; end
++`endif
+     20'h00000: begin sys_ack <= sys_en;  sys_rdata <= {                id_value          }; end
+     20'h00004: begin sys_ack <= sys_en;  sys_rdata <= {                dna_value[32-1: 0]}; end
+     20'h00008: begin sys_ack <= sys_en;  sys_rdata <= {{64- 57{1'b0}}, dna_value[57-1:32]}; end
+diff --git a/rtl/rtl/classic/rp_asg_axi.sv b/rtl/rtl/classic/rp_asg_axi.sv
+index e17b303..c28e38b 100644
+--- a/rtl/rtl/classic/rp_asg_axi.sv
++++ b/rtl/rtl/classic/rp_asg_axi.sv
+@@ -37,6 +37,28 @@ module rp_asg_axi #(
+ //---------------------------------------------------------------------------------
+ //
+ 
++`ifdef RTQLM_E1_SYNC
++// Capture image: DAC DDR streaming is unavailable; BRAM generators remain.
++assign dac_o = '0;
++assign axi_state_o = '0;
++assign axi_last_o = 1'b0;
++assign axi_last_pre_o = 1'b0;
++assign axi_first_o = 1'b0;
++assign axi_sys.waddr = '0;
++assign axi_sys.wdata = '0;
++assign axi_sys.wsel = '0;
++assign axi_sys.wvalid = 1'b0;
++assign axi_sys.wlen = '0;
++assign axi_sys.wsize = 3'd3;
++assign axi_sys.wfixed = 1'b0;
++assign axi_sys.raddr = '0;
++assign axi_sys.rsel = '0;
++assign axi_sys.rvalid = 1'b0;
++assign axi_sys.rlen = '0;
++assign axi_sys.rsize = 3'd3;
++assign axi_sys.rfixed = 1'b0;
++assign axi_sys.rrdys = 1'b0;
++`else
+ localparam DW = 64;
+ localparam AW = 32;
+ localparam LW =  4;
+@@ -153,4 +175,5 @@ asg_dat_fifo inst_asg_dat_fifo
+   .rd_rst_busy    (                 )
+ );
+ 
++`endif // RTQLM_E1_SYNC
+ endmodule
+diff --git a/rtl/rtl/classic/rp_scope_com.v b/rtl/rtl/classic/rp_scope_com.v
+index 2c31fd0..96646de 100644
+--- a/rtl/rtl/classic/rp_scope_com.v
++++ b/rtl/rtl/classic/rp_scope_com.v
+@@ -63,6 +63,10 @@ module rp_scope_com #(
+    // ADC
+    input      [N_CH   -1: 0] adc_clk_i      ,  // ADC clock
+    input      [N_CH   -1: 0] adc_rstn_i     ,  // ADC reset - active low
++`ifdef RTQLM_E1_SYNC
++   input e1_enable_i,
++   input [N_CH*DW-1:0] e1_tagged_dat_i,
++`endif
+    input      [N_CH*DW-1: 0] adc_dat_i      ,  // ADC data CHA
+    // trigger sources
+    input                     trig_ext_i     ,  // external trigger
+@@ -331,6 +335,12 @@ rp_decim #(
+ 
+ assign dec_val_65 = dec_val;
+ 
++`ifdef RTQLM_E1_SYNC
++// Tagged raw samples bypass calibration/filter/decimation as a unit.
++// Both ADC rails and E1 enter the SAME existing delay/FIFO/DMA path.
++wire [DW-1:0] e1_dly_dat = e1_enable_i ? e1_tagged_dat_i[GV*DW +: DW] : adc_dly_in;
++wire e1_dly_valid = e1_enable_i ? 1'b1 : dec_val_65;
++`endif
+ rp_delay #(
+   .DW  (  DW    )
+ ) i_dly (
+@@ -341,8 +351,13 @@ rp_delay #(
+   .axi_rstn_i    ( axi_rstn[GV]                   ),  // AXI reset - active low
+ 
+    // Connection to AXI master
++`ifdef RTQLM_E1_SYNC
++  .dly_dat_i(e1_dly_dat),
++  .dly_val_i(e1_dly_valid),
++`else
+   .dly_dat_i     ( adc_dly_in                     ),
+   .dly_val_i     ( dec_val_65                        ),
++`endif
+   .set_trg_src_i ( trg_src[(GV+1)*5-1:GV*5]       ),
+   .set_trg_new_i ( new_trg_src[GV]                ),
+ 
+diff --git a/prj/v0.94/rtl/rp_e1_tag.sv b/prj/v0.94/rtl/rp_e1_tag.sv
+new file mode 100644
+--- /dev/null
++++ b/prj/v0.94/rtl/rp_e1_tag.sv
+@@ -0,0 +1,37 @@
++`timescale 1ns/1ps
++// RTQLM: atomic {ADC14, E1} records, on the ADC clock. No software timestamps.
++// Word bits: [13:0] signed ADC counts, [14] E1, [15] format marker (1).
++// Control: bit 0 enable (handled by scope); bit 1 diagnostic pattern;
++// bits [14:8] extra GPIO history cycles. Default tap 5 gives seven clock
++// edges from the input sample through meta/sync/history. Physical ADC/input
++// path skew must be measured separately before claiming aperture alignment.
++module rp_e1_tag (
++    input  logic        clk,
++    input  logic        rstn,
++    input  logic        e1_i,
++    input  logic [13:0] adc_a_i,
++    input  logic [13:0] adc_b_i,
++    input  logic [31:0] control_i,
++    output logic [15:0] word_a_o,
++    output logic [15:0] word_b_o
++);
++    (* ASYNC_REG = "TRUE" *) logic e1_meta, e1_sync;
++    logic [127:0] history;
++    logic [13:0] counter;
++    always_ff @(posedge clk) begin
++        if (!rstn) begin
++            e1_meta <= 0;
++            e1_sync <= 0;
++            history <= '0;
++            counter <= '0;
++        end else begin
++            e1_meta <= e1_i;
++            e1_sync <= e1_meta;
++            history <= {history[126:0], e1_sync};
++            counter <= counter + 1'b1;
++        end
++    end
++    wire e1 = control_i[1] ? counter[5] : history[control_i[14:8]];
++    assign word_a_o = {1'b1, e1, control_i[1] ? counter : adc_a_i};
++    assign word_b_o = {1'b1, e1, control_i[1] ? ~counter : adc_b_i};
++endmodule
+diff --git a/prj/v0.94/rtl/rp_e1_fast_add.sv b/prj/v0.94/rtl/rp_e1_fast_add.sv
+new file mode 100644
+--- /dev/null
++++ b/prj/v0.94/rtl/rp_e1_fast_add.sv
+@@ -0,0 +1,22 @@
++`timescale 1ns/1ps
++// Carry-select blocks with short carry lookahead for the extended ASG pointer.
++module rp_e1_fast_add #(parameter int W=63) (
++    input wire [W-1:0] a, b,
++    output wire [W-1:0] sum
++);
++    localparam int N=(W+15)/16;
++    localparam int PW=N*16;
++    wire [PW-1:0] aa={{(PW-W){1'b0}},a};
++    wire [PW-1:0] bb={{(PW-W){1'b0}},b};
++    wire [PW-1:0] result;
++    wire [N:0] carry;
++    assign carry[0]=1'b0;
++    for (genvar i=0;i<N;i++) begin: block_add
++        wire [16:0] s0={1'b0,aa[i*16+:16]}+{1'b0,bb[i*16+:16]};
++        wire [15:0] s1=aa[i*16+:16]+bb[i*16+:16]+16'd1;
++        wire propagate=&(aa[i*16+:16]^bb[i*16+:16]);
++        assign carry[i+1]=s0[16] | (propagate & carry[i]);
++        assign result[i*16+:16]=carry[i] ? s1 : s0[15:0];
++    end
++    assign sum=result[W-1:0];
++endmodule

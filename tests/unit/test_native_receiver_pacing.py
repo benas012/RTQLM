@@ -1,19 +1,33 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import queue
+import sys
 import threading
 from types import SimpleNamespace
 
 import pytest
+import websockets
 
 from apps.native_receiver import native_receiver as nr
+from apps.native_receiver import stream_controller
+from apps.native_receiver.helpers import (
+    acquisition_batch_seconds,
+    acquisition_channel_count,
+    display_interval_ms,
+    format_duration,
+    next_frame_delay_ms,
+    smooth_acquisition_block_size,
+    start_display_timer,
+)
+from apps.native_receiver.protocol import Device
 from tests.unit.test_native_receiver_connect_flow import Value
 
 
 @pytest.mark.parametrize(("work_ms", "delay_ms"), [(0, 16), (2, 14), (10, 6), (16, 1), (50, 1)])
 def test_refresh_budget_accounts_for_drawing_time(work_ms: int, delay_ms: int) -> None:
-    assert nr.next_frame_delay_ms(1_000_000_000, 1_000_000_000 + work_ms * 1_000_000) == delay_ms
+    assert next_frame_delay_ms(1_000_000_000, 1_000_000_000 + work_ms * 1_000_000) == delay_ms
 
 
 def test_idle_receiver_waits_without_redrawing_or_busy_polling(
@@ -27,7 +41,7 @@ def test_idle_receiver_waits_without_redrawing_or_busy_polling(
     app.rendered_frame_count = 0
     app.last_render_monotonic_ns = 0
     clock = iter([1_000_000_000, 1_002_000_000, 1_016_000_000, 1_018_000_000])
-    monkeypatch.setattr(nr, "time_monotonic_ns", lambda: next(clock))
+    monkeypatch.setattr(stream_controller, "time_monotonic_ns", lambda: next(clock))
     delays = []
     app.after = lambda delay, _callback: delays.append(delay)  # type: ignore[method-assign]
     app._drain_events()
@@ -63,20 +77,23 @@ def test_stable_two_channel_preset_sets_balanced_speed() -> None:
     assert app.acquisition_decimation.get() == "1024"
     assert app.acquisition_block_size.get() == "32768"
     assert app.acquisition_rate.get() == "Sample rate: 122.07 kHz"
-    assert app.acquisition_batch.get() == "Batch: 67 ms · 2 ch"
+    assert app.acquisition_batch.get() == "Batch: 134 ms · 2 ch"
     assert applied == [True]
 
 
-def test_acquisition_batch_estimate_uses_enabled_channels() -> None:
-    device = nr.Device("id", "RP", "rp.local", "ready", True, False, 1024, 32768)
-    assert nr.acquisition_channel_count(device) == 1
-    assert nr.acquisition_batch_seconds(32768, 2, 122_070.3125) == pytest.approx(0.067108864)
-    assert nr.format_duration(0.067108864) == "67 ms"
+def test_acquisition_batch_size_is_per_channel() -> None:
+    device = Device("id", "RP", "rp.local", "ready", True, False, 1024, 32768)
+    assert acquisition_channel_count(device) == 1
+    for channels in (1, 2):
+        assert acquisition_batch_seconds(32768, channels, 122_070.3125) == pytest.approx(
+            0.134217728
+        )
+    assert format_duration(0.134217728) == "134 ms"
 
 
 @pytest.mark.parametrize("decimation", [1, 64, 256, 1024, 8192, 65536])
 def test_smooth_preset_bounds_packet_overhead(decimation: int) -> None:
-    block = nr.smooth_acquisition_block_size(decimation)
+    block = smooth_acquisition_block_size(decimation)
     assert 2048 <= block <= 2_097_152
     assert block & (block - 1) == 0
     assert (125_000_000 / decimation) * 2 / block < 120
@@ -91,9 +108,9 @@ def test_windows_display_timer_is_released_only_if_acquired(
         timeBeginPeriod=lambda period: (calls.append(("begin", period)), result)[1],
         timeEndPeriod=lambda period: calls.append(("end", period)),
     )
-    monkeypatch.setattr(nr.sys, "platform", "win32")
-    monkeypatch.setattr(nr.ctypes, "WinDLL", lambda _name: winmm, raising=False)
-    release = nr.start_display_timer()
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(ctypes, "WinDLL", lambda _name: winmm, raising=False)
+    release = start_display_timer()
     assert calls == [("begin", 1)]
     release()
     assert calls == ([("begin", 1), ("end", 1)] if result == 0 else [("begin", 1)])
@@ -104,23 +121,25 @@ def test_socket_failure_releases_display_timer(monkeypatch: pytest.MonkeyPatch) 
     app.events = queue.Queue()
     app.stop_event = threading.Event()
     released = []
-    monkeypatch.setattr(nr, "start_display_timer", lambda: lambda: released.append(True))
+    monkeypatch.setattr(
+        stream_controller, "start_display_timer", lambda: lambda: released.append(True)
+    )
 
     def fail_connect(*_args: object, **_kwargs: object) -> None:
         raise ConnectionRefusedError("test")
 
-    monkeypatch.setattr(nr.websockets, "connect", fail_connect)
+    monkeypatch.setattr(websockets, "connect", fail_connect)
     asyncio.run(app._socket_loop("ws://127.0.0.1:9/test"))
     assert released == [True]
 
 
 def test_auto_display_slows_as_the_view_widens() -> None:
-    intervals = [nr.display_interval_ms("Auto", zoom) for zoom in (1, 1 / 4, 1 / 64, 1 / 4096)]
+    intervals = [display_interval_ms("Auto", zoom) for zoom in (1, 1 / 4, 1 / 64, 1 / 4096)]
     assert intervals == [16, 32, 128, 1000]
-    assert nr.display_interval_ms("Auto", 1 / 4096, visible_seconds=7.999) == 1000
-    assert nr.display_interval_ms("Auto", 1 / 4096, visible_seconds=8.0) == 500
-    assert nr.display_interval_ms("Live", 1 / 4096) == 16
-    assert nr.display_interval_ms("Slow", 1) == 500
+    assert display_interval_ms("Auto", 1 / 4096, visible_seconds=7.999) == 1000
+    assert display_interval_ms("Auto", 1 / 4096, visible_seconds=8.0) == 500
+    assert display_interval_ms("Live", 1 / 4096) == 16
+    assert display_interval_ms("Slow", 1) == 500
 
 
 def test_slow_display_keeps_latest_frame_without_a_backlog(
@@ -139,7 +158,8 @@ def test_slow_display_keeps_latest_frame_without_a_backlog(
     app._handle_frame = lambda _frame, count: received.append(count)  # type: ignore[method-assign]
     for count, elapsed_ms in enumerate((0, 16, 32, 499, 500, 516, 1000), start=1):
         monkeypatch.setattr(
-            nr, "time_monotonic_ns", lambda elapsed=elapsed_ms: 1_000_000_000 + elapsed * 1_000_000
+            stream_controller, "time_monotonic_ns",
+            lambda elapsed=elapsed_ms: 1_000_000_000 + elapsed * 1_000_000,
         )
         app.socket_frame_count = count
         app._drain_events()

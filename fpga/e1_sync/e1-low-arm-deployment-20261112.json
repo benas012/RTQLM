@@ -1,0 +1,83 @@
+{
+  "host": "rp-f0f9eb.local",
+  "alias": "/root/rtqlm-nullifiers/e1-mask-20261112/build/rp-buffered-board",
+  "previousTarget": "/root/rtqlm-nullifiers/engine-builds/047c8c70a55ca614bf94f34d/46fe3e5ec6d74e9fbbc9504dbb788c42/build/rp-buffered-board",
+  "newTarget": "/root/rtqlm-nullifiers/engine-builds/e5062bb4a866bc3afdef6833/f5200792bd2e46e69bb06b663a2e2afb/build/rp-buffered-board",
+  "sha256": "9e68dc4dddecd756bee7c3054995dacb5199ad1fd64e99259b3e0e8c68ff65d8",
+  "measurementLevel": "low",
+  "sdkTestsPassed": 38,
+  "armNeonOraclePassed": true,
+  "liveValidation": {
+    "results": [
+      {
+        "captures": 3,
+        "capturedModes": 159712,
+        "includedModes": 80309,
+        "excludedModes": 79403,
+        "e1MeasurementLevel": "low",
+        "calibrated": false,
+        "status": "E1 LOW admitted; HIGH intervals excluded from calculation. Variances calculated in C on Red Pitaya; only variance results over TCP."
+      },
+      {
+        "captures": 6,
+        "capturedModes": 159712,
+        "includedModes": 81165,
+        "excludedModes": 78547,
+        "e1MeasurementLevel": "low",
+        "calibrated": false,
+        "status": "E1 LOW admitted; HIGH intervals excluded from calculation. Variances calculated in C on Red Pitaya; only variance results over TCP."
+      }
+    ],
+    "state": {
+      "state": "streaming",
+      "source": "redpitaya",
+      "host": "http://rp-f0f9eb.local/",
+      "connected": true,
+      "streamId": null,
+      "sequence": 0,
+      "packetsReceived": 0,
+      "framesPublished": 0,
+      "malformedPackets": 0,
+      "serviceDroppedFrames": 0,
+      "webSocketClients": 0,
+      "fpgaLostCh1": 0,
+      "fpgaLostCh2": 0,
+      "fpgaLossDeltasCh1": 0,
+      "fpgaLossDeltasCh2": 0,
+      "packetIdGaps": 0,
+      "decimation": 1,
+      "baseRateHz": 125000000,
+      "sampleRateHz": 125000000.0,
+      "lastFrameUtc": null,
+      "lastError": null,
+      "streamingModule": "redpitaya-buffered-captures",
+      "streamingModulePath": null,
+      "deviceId": "3d0f4df8-c7ab-4a79-8dfe-8261a2f20af2",
+      "name": "Red Pitaya URL",
+      "externalTrigger": {
+        "config": {
+          "enabled": false,
+          "pin": "DIO0_P",
+          "edge": "rising",
+          "pollIntervalMs": 10.0
+        },
+        "state": "disabled",
+        "level": null,
+        "triggerCount": 0,
+        "lastTriggerAtUtc": null,
+        "lastReadAtUtc": null,
+        "lastPollIntervalMs": null,
+        "lastError": null
+      },
+      "nullifierBackend": "redpitaya-arm-c",
+      "acquisitionMode": "buffered",
+      "captureSamples": 6250048,
+      "captureDurationSeconds": 0.050000384,
+      "measurementWindowMs": 50.0
+    },
+    "settingsRestored": true
+  },
+  "scalarGateOraclePassed": true,
+  "pythonChecksPassed": 48,
+  "uiCheckPassed": true
+}

@@ -25,6 +25,11 @@ class RawSampleFrame:
     fpga_lost_ch2: int = 0
     packet_gap_detected: bool = False
     service_drop_detected: bool = False
+    adc_capture_unix_ns: int = 0
+    adc_zero_ch1: float = 0.0
+    adc_zero_ch2: float = 0.0
+    adc_scale_ch1: float = 1 / 8192
+    adc_scale_ch2: float = 1 / 8192
 
     def __post_init__(self) -> None:
         if self.channel_mask not in (1, 2, 3):

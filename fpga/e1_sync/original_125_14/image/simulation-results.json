@@ -1,0 +1,33 @@
+{
+  "targetModel": "z10_125",
+  "tool": "Vivado Simulator 2025.1",
+  "allPassed": true,
+  "cases": [
+    {
+      "name": "e1_tag",
+      "passed": true,
+      "result": "PASS: 20000 random and diagnostic sample pairs; taps 0,5,127; marker, ADC preservation, and common E1 tags",
+      "inputSha256": {
+        "rp_e1_tag.sv": "5bac1ab6ce6930d5b8bf813705926ab77190114f3905b51b903910b3623847c0",
+        "tb_e1_tag.sv": "c0ff61ccc7a648fafdd48c7ad8cac3c1496c9cfb435f8f776f3fac6fed1cdfec"
+      }
+    },
+    {
+      "name": "fast_add",
+      "passed": true,
+      "result": "PASS: 50000 random/overflow 63-bit additions and three-operand ASG wrap sums",
+      "inputSha256": {
+        "rp_e1_fast_add.sv": "89af9fc4be4afa0ec5ca278f70b4a56357af352fc095f12ec70fbb279a3649aa",
+        "tb_fast_add.sv": "76c6981e11a86e803b8503dbff2c332d235755a6fdf390a225b83887de835f34"
+      }
+    },
+    {
+      "name": "asg_equivalence",
+      "passed": true,
+      "result": "PASS: 100000 full-generator cycles match original RTL; 64908 nonzero output samples; fractional frequency, bursts, delay and wrap exercised",
+      "inputSha256": {
+        "generated_asg_equivalence.sv": "ae12e07b0dd5d73cac964ca6ef00fe641d768d6397530e6ec875bb1a45a0ac58"
+      }
+    }
+  ]
+}

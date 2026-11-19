@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115,<1",
   "numpy>=1.26,<2.4",
+  "paramiko>=3.5,<5",
   "pydantic>=2.9,<3",
   "pydantic-settings>=2.5,<3",
   "uvicorn[standard]>=0.30,<1",
@@ -29,9 +30,22 @@ dev = [
 [project.scripts]
 quantum-light-engine = "quantum_light_engine.cli:main"
 quantum-light-receiver = "apps.native_receiver.native_receiver:main"
+native_receiver = "apps.native_receiver.native_receiver:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/redpitaya_acquisition", "src/quantum_light_engine", "apps"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"native/redpitaya_nullifiers/Makefile" = "quantum_light_engine/native_sources/Makefile"
+"native/redpitaya_nullifiers/nullifier.h" = "quantum_light_engine/native_sources/nullifier.h"
+"native/redpitaya_nullifiers/nullifier.c" = "quantum_light_engine/native_sources/nullifier.c"
+"native/redpitaya_nullifiers/commands.c" = "quantum_light_engine/native_sources/commands.c"
+"native/redpitaya_nullifiers/stream.h" = "quantum_light_engine/native_sources/stream.h"
+"native/redpitaya_nullifiers/stream.c" = "quantum_light_engine/native_sources/stream.c"
+"native/redpitaya_nullifiers/acquire_rp.cpp" = "quantum_light_engine/native_sources/acquire_rp.cpp"
+"native/redpitaya_nullifiers/buffered_worker.c" = "quantum_light_engine/native_sources/buffered_worker.c"
+"native/redpitaya_nullifiers/vendor/cJSON.c" = "quantum_light_engine/native_sources/vendor/cJSON.c"
+"native/redpitaya_nullifiers/vendor/cJSON.h" = "quantum_light_engine/native_sources/vendor/cJSON.h"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -52,5 +66,5 @@ packages = ["redpitaya_acquisition", "quantum_light_engine"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = "numpy.*"
+module = ["numpy.*", "paramiko.*"]
 ignore_missing_imports = true

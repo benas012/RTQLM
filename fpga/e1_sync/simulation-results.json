@@ -1,0 +1,10 @@
+{
+  "tool": "Vivado Simulator 2025.1",
+  "baseCommit": "c3fc4f6ebebf9b24f008ecb606eb7a3a23f62422",
+  "tests": [
+    {"name": "E1 sample packing and GPIO history", "cases": 20000, "passed": true, "historyTaps": [0, 5, 127]},
+    {"name": "63-bit addition and carry-save wrap arithmetic", "cases": 50000, "passed": true},
+    {"name": "Complete modified generator compared with original RTL", "cycles": 100000, "nonzeroOutputSamples": 64908, "passed": true}
+  ],
+  "generatorSimulationNotes": "The stricter simulator requires forward scalar declarations and enum literal widths to be normalized in both versions. Production RTL declarations are unchanged. DAC DDR playback is stubbed identically in both versions."
+}

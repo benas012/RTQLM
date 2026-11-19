@@ -1,0 +1,3 @@
+{"command":"configure","config":{"decimation":1,"captureSamples":6250048,"measurementSamples":6250000,"historyModes":200000,"collectSeconds":0.05,"acquisitionGatePin":"DIO0_P","acquisitionGatePollUs":500,"rawReadout":"ram_copy"}}
+{"command":"capture","previewPoints":1024,"maxPoints":500}
+{"command":"status"}

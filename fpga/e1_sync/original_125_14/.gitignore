@@ -1,0 +1,5 @@
+/workspace/
+/simulation/
+*.log
+*.jou
+__pycache__/

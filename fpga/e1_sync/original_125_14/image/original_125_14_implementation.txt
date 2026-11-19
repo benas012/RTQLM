@@ -1,0 +1,9 @@
+targetModel=z10_125
+part=xc7z010clg400-1
+defines=Z10 RTQLM_E1_SYNC
+e1PackagePin=G17
+e1IOStandard=LVCMOS33
+e1MetaAsync=1
+e1SyncAsync=1
+e1SynchronizerSlackNs=7.238
+hardwareTested=false

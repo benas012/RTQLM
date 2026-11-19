@@ -1,0 +1,4 @@
+{"command":"configure","config":{"measurementBasis":"x","nullifiers":[{"name":"cluster_x","start":0,"terms":[{"source":"a","offset":0,"weight":1},{"source":"a","offset":1,"weight":1},{"source":"b","offset":0,"weight":1},{"source":"b","offset":1,"weight":-1}]}]}}
+{"command":"status"}
+{"command":"capture"}
+{"command":"latest"}

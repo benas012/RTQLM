@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -30,6 +31,11 @@ class ProfileFields(CamelModel):
     channel_1_enabled: bool = True
     channel_2_enabled: bool = True
     decimation: int = Field(default=256, ge=1, le=65_536)
+    acquisition_mode: Literal["streaming", "buffered"] = "streaming"
+    buffered_processing: Literal["arm", "server"] = "arm"
+    server_stream_processing: bool = False
+    measurement_window_ms: float = Field(default=5.0, gt=0, le=1000, allow_inf_nan=False)
+    capture_samples: int = Field(default=625_024, ge=64, le=8_388_608, multiple_of=64)
     block_size_bytes: int = Field(default=131_072, ge=2_048, le=2_097_152)
     adc_buffer_size_bytes: int = Field(default=4_194_304, ge=1_048_576, le=104_857_600)
     streaming_module_path: str | None = None
@@ -38,6 +44,20 @@ class ProfileFields(CamelModel):
 
     @model_validator(mode="after")
     def validate_profile(self) -> ProfileFields:
+        if self.server_stream_processing and (self.source is not DeviceSource.REDPITAYA
+                or self.acquisition_mode != 'streaming' or not self.channel_1_enabled
+                or not self.channel_2_enabled or self.decimation not in (1,2)):
+            raise ValueError('Server streaming requires both channels, streaming mode and decimation 1 or 2')
+        if self.buffered_processing == "server":
+            if (self.source is not DeviceSource.REDPITAYA or self.acquisition_mode != "buffered" or self.decimation not in (1, 2)
+                    or not self.channel_1_enabled or not self.channel_2_enabled):
+                raise ValueError("Server buffered processing requires both channels, buffered mode and decimation 1 or 2")
+            samples = round(self.measurement_window_ms * 125000 / self.decimation)
+            if samples < 1:
+                raise ValueError("Measurement window must contain at least one ADC sample")
+            expected = ((samples + 63) // 64) * 64
+            if self.capture_samples != expected:
+                raise ValueError(f"Server buffered processing requires captureSamples={expected} for the configured measurement window")
         self.name = self.name.strip()
         if not self.name:
             raise ValueError("device name must not be empty")

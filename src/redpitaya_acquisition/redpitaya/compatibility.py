@@ -65,6 +65,8 @@ class StreamingCompatibility:
             ("adc_size", settings.adc_buffer_size_bytes, ("setADCBufferSize", "setADCSize")),
         )
         if hasattr(self.config_client, "sendConfig"):
+            if settings.require_adc_timestamps:
+                values += (("adc_capture_time", "ON", ()),)
             for key, value, _ in values:
                 serialized = str(value)
                 if self._host_specific_config and self.host is not None:
@@ -91,10 +93,19 @@ class StreamingCompatibility:
         self._require_success("startStreaming", self.client.startStreaming())
 
     def stop(self) -> None:
-        if hasattr(self.client, "notifyStop"):
-            self._require_success("notifyStop", self.client.notifyStop())
-        elif hasattr(self.client, "stopStreaming"):
+        # stopStreaming is the board-side stop operation. notifyStop only
+        # signals a local callback/wait loop and can leave the RP streaming.
+        if hasattr(self.client, "stopStreaming"):
             self._require_success("stopStreaming", self.client.stopStreaming())
+        elif hasattr(self.client, "notifyStop"):
+            self._require_success("notifyStop", self.client.notifyStop())
+
+    def stop_remote_stream(self) -> None:
+        """Clear ADC streaming left behind by a previous client process."""
+
+        method = getattr(self.config_client, "requestADCServerStop", None)
+        if callable(method) and self.host is not None:
+            self._require_success("requestADCServerStop", method(self.host))
 
     def disconnect(self) -> None:
         if hasattr(self.client, "disconnect"):

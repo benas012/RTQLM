@@ -20,6 +20,8 @@ class DeviceSessionManager:
         self.settings = settings
         self._sessions: dict[UUID, DeviceSession] = {}
         self._accepting_operations = True
+        self._shutdown_complete = False
+        self._shutdown_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         for profile in await self.repository.list():
@@ -60,6 +62,7 @@ class DeviceSessionManager:
         session = self.require(device_id)
         if session.state is not DeviceSessionState.DISCONNECTED:
             raise RuntimeError("a connected device cannot be deleted")
+        await session.trigger.stop()
         await self.repository.delete(device_id)
         del self._sessions[device_id]
 
@@ -81,20 +84,23 @@ class DeviceSessionManager:
                 )
 
     async def shutdown(self) -> None:
-        self._accepting_operations = False
-        tasks = [session.disconnect() for session in self._sessions.values()]
-        if not tasks:
-            return
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=self.settings.shutdown_timeout_seconds,
-            )
-        except TimeoutError:
-            logger.error("bounded engine shutdown timed out")
-        finally:
-            for session in self._sessions.values():
-                session.broadcaster.close()
+        async with self._shutdown_lock:
+            if self._shutdown_complete:
+                return
+            self._accepting_operations = False
+            tasks = [session.disconnect() for session in self._sessions.values()]
+            try:
+                if tasks:
+                    await asyncio.wait_for(
+                        asyncio.gather(*tasks, return_exceptions=True),
+                        timeout=self.settings.shutdown_timeout_seconds,
+                    )
+            except TimeoutError:
+                logger.error("bounded engine shutdown timed out")
+            finally:
+                for session in self._sessions.values():
+                    session.broadcaster.close()
+                self._shutdown_complete = True
 
     def _ensure_accepting(self) -> None:
         if not self._accepting_operations:

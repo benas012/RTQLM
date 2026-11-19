@@ -1,0 +1,4 @@
+RTQLM E1 synchronized raw acquisition for original STEMlab 125-14
+Commit c3fc4f6ebebf9b24f008ecb606eb7a3a23f62422
+Release_2026.1 + RTQLM_E1_SYNC
+Target z10_125; Vivado 2025.1; hardware validation pending

@@ -5,7 +5,8 @@ import asyncio
 import numpy as np
 import pytest
 
-from apps.native_receiver.native_receiver import compute_spectrum, parse_frame
+from apps.native_receiver.helpers import compute_spectrum
+from apps.native_receiver.protocol import parse_frame
 from redpitaya_acquisition.config.settings import Settings
 from redpitaya_acquisition.redpitaya.callback import create_callback
 from redpitaya_acquisition.streaming.binary_protocol import serialize_frame

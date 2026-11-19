@@ -1,26 +1,40 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from apps.native_receiver import native_receiver as nr
+from apps.native_receiver.api_client import EngineClient
+from apps.native_receiver.constants import CONNECTION_OVERLAY_BG
+from apps.native_receiver.protocol import Device
+from apps.native_receiver.settings import AppSettings
 
 
-def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
+def check_slow_redpitaya_connect_keeps_tk_ui_responsive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         nr,
         "load_settings",
-        lambda: nr.AppSettings(launch_engine_on_start=False),
+        lambda: AppSettings(launch_engine_on_start=False),
     )
     monkeypatch.setattr(nr.ReceiverApp, "refresh_devices", lambda self: None)
+    monkeypatch.setattr(
+        EngineClient, "is_running", lambda self: False,
+    )
     app = nr.ReceiverApp()
     try:
+        app.attributes("-alpha", 0)
+        # Complete the initial window mapping before measuring a user's Connect action.
+        app.update()
         assert "disabled" in app.connect_button.state()
-        device = nr.Device(
+        device = Device(
             id="11111111-1111-1111-1111-111111111111",
             name="RP slow",
             host="rp-slow.local",
@@ -37,6 +51,7 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
         app._start_socket = lambda _device_id: None  # type: ignore[method-assign]
         app._open_device_tab = lambda _device_id: None  # type: ignore[method-assign]
         app._apply_loaded_devices = lambda _devices: None  # type: ignore[method-assign]
+        ui_thread = threading.get_ident()
 
         def api(
             _api_base: str,
@@ -47,6 +62,7 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
             timeout_seconds: float = 10,
         ) -> dict[str, str] | None:
             del timeout_seconds
+            assert threading.get_ident() != ui_thread
             if path.endswith("/status"):
                 return {"state": "disconnected"}
             if method == "POST" and path.endswith("/connect"):
@@ -60,6 +76,13 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
         app._load_devices = lambda _api_base: [device]  # type: ignore[method-assign]
 
         app.connect_selected()
+        heartbeats: list[float] = []
+
+        def heartbeat() -> None:
+            heartbeats.append(time.monotonic())
+            app.after(25, heartbeat)
+
+        app.after(25, heartbeat)
         seen: list[str] = []
         end = time.monotonic() + 0.7
         while time.monotonic() < end:
@@ -68,17 +91,18 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
             time.sleep(0.02)
 
         assert len(set(seen)) > 2
+        assert len(heartbeats) >= 8
         assert app.loading_active
         assert app.cget("cursor") == ""
         assert app.connection_overlay is not None
         assert app.connection_overlay.winfo_ismapped()
-        assert app.connection_overlay.cget("bg") == nr.CONNECTION_OVERLAY_BG
-        assert nr.CONNECTION_OVERLAY_BG != "#000000"
+        assert app.connection_overlay.cget("bg") == CONNECTION_OVERLAY_BG
+        assert CONNECTION_OVERLAY_BG != "#000000"
         assert app.connection_overlay_bg_rect is not None
         assert app.connection_overlay_canvas is not None
         assert (
             app.connection_overlay_canvas.itemcget(app.connection_overlay_bg_rect, "fill")
-            == nr.CONNECTION_OVERLAY_BG
+            == CONNECTION_OVERLAY_BG
         )
         assert app.connection_overlay_title.get() == "Connecting to Red Pitaya"
         app._show_toast(
@@ -90,6 +114,15 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
 
         assert len(app.toast_frames) == 1
         assert app.toast_frames[0].winfo_exists()
+        toast = app.toast_frames[0]
+        copy_button = next(widget for widget in toast.winfo_children()[0].winfo_children()
+                           if widget.winfo_class() == "Button" and widget.cget("text") == "Copy")
+        copy_button.invoke()
+        assert app.clipboard_get() == (
+            "Connection failed\nCould not connect to Red Pitaya. Timed out after 8s"
+        )
+        assert copy_button.cget("text") == "Copied"
+        assert toast.winfo_exists()
         app._dismiss_toast(app.toast_frames[0])
         app._show_connection_failure(
             "Connection failed",
@@ -118,4 +151,23 @@ def test_slow_redpitaya_connect_keeps_tk_ui_responsive(
 
         assert app.toast_frames == []
     finally:
-        app.destroy()
+        app._on_close()
+
+
+def test_slow_redpitaya_connect_keeps_tk_ui_responsive() -> None:
+    # Tk interpreters and their background callbacks must not leak across pytest tests.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import pytest; from tests.e2e.test_native_receiver_connect_responsiveness "
+            "import check_slow_redpitaya_connect_keeps_tk_ui_responsive; "
+            "patch = pytest.MonkeyPatch(); "
+            "check_slow_redpitaya_connect_keeps_tk_ui_responsive(patch); patch.undo()",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

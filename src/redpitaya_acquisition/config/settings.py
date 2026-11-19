@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     bind_port: int = Field(default=8080, ge=1, le=65_535)
     streaming_module: str | None = None
     verbose_library_logging: bool = False
+    native_nullifier_port: int = Field(default=0, ge=0, le=65535)
+    require_adc_timestamps: bool = False
     auto_start_streaming_app: bool = True
     streaming_app_startup_delay_seconds: float = Field(default=6.0, ge=0, le=30)
     auto_start: bool = False

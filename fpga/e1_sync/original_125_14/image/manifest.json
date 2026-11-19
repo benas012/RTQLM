@@ -1,0 +1,60 @@
+{
+  "targetModel": "z10_125",
+  "targetBoard": "Original STEMlab 125-14, Zynq 7010",
+  "baseRelease": "Release_2026.1",
+  "baseCommit": "c3fc4f6ebebf9b24f008ecb606eb7a3a23f62422",
+  "sourcePatchSha256": "35568e18ed1ae44a432d9ee6339093814af63fa608a9bfb4007cd5d9211d3af4",
+  "tool": "Vivado 2025.1",
+  "part": "xc7z010clg400-1",
+  "defines": [
+    "Z10",
+    "RTQLM_E1_SYNC"
+  ],
+  "routedTimingMet": true,
+  "wnsNs": 0.014,
+  "tnsNs": 0.0,
+  "whsNs": 0.008,
+  "setupFailingEndpoints": 0,
+  "setupEndpoints": 28288,
+  "simulationPassed": true,
+  "sdInstallerSmokePassed": true,
+  "hardwareTested": false,
+  "physicalE1TimingOffsetVerified": false,
+  "e1SynchronizerSlackNs": 7.238,
+  "e1Pin": {
+    "header": "E1",
+    "physicalPin": 3,
+    "signal": "DIO0_P",
+    "fpgaPad": "G17",
+    "ioStandard": "LVCMOS33"
+  },
+  "wordFormat": {
+    "adcBits": [
+      0,
+      13
+    ],
+    "e1Bit": 14,
+    "markerBit": 15
+  },
+  "disabledFeatures": [
+    "DDR waveform playback to DAC outputs"
+  ],
+  "taggedAcquisitionUsesRawCounts": true,
+  "deviceTree": "Keep the original board's factory fpga.dtbo; no device tree supplied",
+  "payloadSha256": {
+    "fpga.bin": "52d4a29b6d73f402d2cacd2609e483524c84c5f0e7e34cf976a9f814d751f2d6",
+    "fpga.bit": "0feeea02aec5d55dbfeef498da2e4b5b1ff0cd1c5256c092a29be8a2dba48724",
+    "git_info.txt": "d19de6492d8ca1a7b56fe5c1d8b47f0453de5abeec4a5fb1da665bb35ee9b0a9"
+  },
+  "evidenceSha256": {
+    "red_pitaya_top_timing_summary_postroute_physopted.rpt": "7ced1f99bf29306836a0e0ee6bba0b828d81fcfb297f845c0e72f898326ff1d7",
+    "red_pitaya_top_utilization_placed.rpt": "2f3e12b5627aed94a595c0456b9d8df71dcd4088c7837596d570d544110aa801",
+    "red_pitaya_top_drc_routed.rpt": "d8b8b3f57e8d898945cef2848205187c1efd7f4c5128860c71ea24787a0e36c5",
+    "e1_synchronizer_timing.rpt": "a5c8ee4d1ef72a0fd31704cac2c4e4b8a723eacb6bccaa11a40c2d48f16d8304",
+    "red_pitaya_cdc.rpt": "5b9510f2b3f7111e4067571cdb2646c8dac836a1c34fddb14e1672549e94cc5e",
+    "original_125_14_io.rpt": "551294805f671e5f2fcd238a902fca0d0b462f46deb80b145c0b6e489700290c",
+    "original_125_14_implementation.txt": "ca72d21d627a171f9e39fbba9e6db5244bf02800fb74b38add5e8c11046f69f0",
+    "sd-install-smoke-results.json": "2eefe93763b54827b8058aba60187cb619a91fbcff0681656e51c3cca621c02f",
+    "source-sha256.json": "1d2a0112fde38ffb3c638da4140eb96f96db8aa1ac9ff6bfd78aca7b879f5a44"
+  }
+}

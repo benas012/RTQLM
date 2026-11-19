@@ -27,3 +27,13 @@ async def status(request: Request) -> EngineStatus:
         ),
         total_web_socket_clients=sum(session.broadcaster.client_count for session in sessions),
     )
+
+
+@router.post("/prepare-shutdown")
+async def prepare_shutdown(request: Request) -> dict[str, str]:
+    """Stop device sessions before the desktop launcher terminates the engine."""
+
+    request.app.state.engine_state = "stopping"
+    manager: DeviceSessionManager = request.app.state.session_manager
+    await manager.shutdown()
+    return {"state": "stopping"}

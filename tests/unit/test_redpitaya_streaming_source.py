@@ -10,6 +10,42 @@ from redpitaya_acquisition.redpitaya.library_loader import LoadedStreamingLibrar
 from redpitaya_acquisition.redpitaya.streaming_source import RedPitayaStreamingSource
 
 
+@pytest.fixture(autouse=True)
+def use_one_readiness_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(streaming_source_module, "STREAMING_READY_CONSECUTIVE_PROBES", 1)
+    monkeypatch.setattr(
+        streaming_source_module,
+        "should_isolate_native_client",
+        lambda _module_name: False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_native_client_waits_for_consecutive_ready_probes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probes: list[str] = []
+    sleeps: list[float] = []
+    monkeypatch.setattr(streaming_source_module, "STREAMING_READY_CONSECUTIVE_PROBES", 3)
+    monkeypatch.setattr(
+        streaming_source_module,
+        "_streaming_service_ready",
+        lambda host: probes.append(host) is None,
+    )
+
+    async def record_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr(streaming_source_module.asyncio, "sleep", record_sleep)
+    source = RedPitayaStreamingSource(
+        Settings(_env_file=None, source="redpitaya", host="rp-test.local")
+    )
+
+    assert await source._streaming_service_stable("rp-test.local")
+    assert probes == ["rp-test.local"] * 3
+    assert sleeps == [streaming_source_module.STREAMING_READY_PROBE_INTERVAL_SECONDS] * 2
+
+
 @pytest.mark.asyncio
 async def test_connect_keeps_an_available_streaming_app_running(
     monkeypatch: pytest.MonkeyPatch,
@@ -55,6 +91,10 @@ async def test_connect_uses_version_3_split_clients(monkeypatch: pytest.MonkeyPa
             calls.append(("config", host, key, value))
             return True
 
+        def requestADCServerStop(self, host: str) -> bool:
+            calls.append(("remote-stop", host))
+            return True
+
         def setVerbose(self, enabled: bool) -> None:
             calls.append(("config-verbose", enabled))
 
@@ -83,6 +123,7 @@ async def test_connect_uses_version_3_split_clients(monkeypatch: pytest.MonkeyPa
 
     assert calls[0][0] == "construct"
     assert ("connect", ["rp-test.local"]) in calls
+    assert ("remote-stop", "rp-test.local") in calls
     assert any(call[0] == "callback" for call in calls)
     await source.disconnect()
 
@@ -133,8 +174,11 @@ async def test_test_sine_reuses_the_active_version_3_engine_connection(
             calls.append(("dac-start", host))
             return True
 
+        def stopStreaming(self) -> None:
+            calls.append(("dac-board-stop",))
+
         def notifyStop(self) -> None:
-            calls.append(("dac-stop",))
+            calls.append(("dac-notify-stop",))
 
         def wait(self) -> None:
             calls.append(("dac-wait",))
@@ -194,9 +238,62 @@ async def test_test_sine_reuses_the_active_version_3_engine_connection(
         amplitude_volts=0.2,
     )
 
-    assert ("dac-stop",) in calls
+    assert ("dac-board-stop",) in calls
+    assert ("dac-notify-stop",) in calls
     assert ("dac-wait",) in calls
+    assert calls.index(("dac-board-stop",)) < calls.index(("dac-notify-stop",))
+    assert calls.index(("dac-notify-stop",)) < calls.index(("dac-wait",))
     await source.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_disconnect_request_stops_the_engine_managed_board_app(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stops: list[str] = []
+    monkeypatch.setattr(
+        streaming_source_module,
+        "request_streaming_app_stop",
+        lambda host: stops.append(host),
+    )
+    source = RedPitayaStreamingSource(
+        Settings(_env_file=None, source="redpitaya", host="rp-test.local")
+    )
+
+    await source.shutdown_remote_service()
+
+    assert stops == ["rp-test.local"]
+
+
+@pytest.mark.asyncio
+async def test_lost_connection_skips_native_cleanup_calls() -> None:
+    calls: list[str] = []
+
+    class Adapter:
+        def stop(self) -> None:
+            calls.append("stop")
+
+        def disconnect(self) -> None:
+            calls.append("disconnect")
+
+    class DACClient:
+        def stopStreaming(self) -> None:
+            calls.append("dac-stop")
+
+        def wait(self) -> None:
+            calls.append("dac-wait")
+
+    source = RedPitayaStreamingSource(
+        Settings(_env_file=None, source="redpitaya", host="rp-test.local")
+    )
+    source._adapter = Adapter()  # type: ignore[assignment]
+    source._test_output_client = DACClient()
+    source._connection_lost = True
+
+    await source.stop()
+    await source.disconnect()
+
+    assert calls == []
 
 
 @pytest.mark.asyncio

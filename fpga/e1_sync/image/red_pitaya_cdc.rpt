@@ -1,0 +1,981 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.1 (win64) Build 6140274 Thu May 22 00:12:29 MDT 2025
+| Date         : Sat Nov  7 16:20:06 2026
+| Host         : nelabasis running 64-bit major release  (build 9200)
+| Command      : report_cdc -details -file upstream/prj/v0.94/out/red_pitaya_cdc.rpt
+| Design       : red_pitaya_top
+| Device       : 7z010-clg400
+| Speed File   : -1  PRODUCTION 1.12 2019-11-22
+| Design State : Physopt postRoute
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+CDC Report
+
+ID      Severity  Count  Description
+------  --------  -----  ---------------------------------------------------------------
+CDC-1   Critical    129  1-bit unknown CDC circuitry
+CDC-2   Warning       2  1-bit synchronized with missing ASYNC_REG property
+CDC-3   Info         34  1-bit synchronized with ASYNC_REG property
+CDC-4   Critical      3  Multi-bit unknown CDC circuitry
+CDC-8   Warning       1  Asynchronous reset synchronized with missing ASYNC_REG property
+CDC-10  Critical      1  Combinational logic detected before a synchronizer
+CDC-13  Critical    361  1-bit CDC path on a non-FD primitive
+CDC-15  Warning     376  Clock enable controlled CDC structure detected
+
+Source Clock: pll_adc_clk
+Destination Clock: clk_fpga_0
+CDC Type: No Common Primary Clock
+
+Row  ID     Severity  Description                                 Depth  Exception                Source (From)                                                    Destination (To)
+---  -----  --------  ------------------------------------------  -----  -----------------------  ---------------------------------------------------------------  ------------------------------------------------------------------------
+  1  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[0]/C                                     ps/axi_slave_gp0/axi\\.RDATA_reg[0]/D
+  2  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[1]/C                                     ps/axi_slave_gp0/axi\\.RDATA_reg[1]/D
+  3  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[2]/C                                     ps/axi_slave_gp0/axi\\.RDATA_reg[2]/D
+  4  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[3]/C                                     ps/axi_slave_gp0/axi\\.RDATA_reg[3]/D
+  5  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_hk/sys_rdata_reg[4]/C                                          ps/axi_slave_gp0/axi\\.RDATA_reg[4]/D
+  6  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[5]/C                                     ps/axi_slave_gp0/axi\\.RDATA_reg[5]/D
+  7  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[6]/C                                     ps/axi_slave_gp0/axi\\.RDATA_reg[6]/D
+  8  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[7]/C                                     ps/axi_slave_gp0/axi\\.RDATA_reg[7]/D
+  9  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_hk/sys_rdata_reg[8]/C                                          ps/axi_slave_gp0/axi\\.RDATA_reg[8]/D
+ 10  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[9]/C                                     ps/axi_slave_gp0/axi\\.RDATA_reg[9]/D
+ 11  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[10]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[10]/D
+ 12  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[11]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[11]/D
+ 13  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[12]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[12]/D
+ 14  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[13]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[13]/D
+ 15  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_asg/sys_rdata_reg[14]/C                                        ps/axi_slave_gp0/axi\\.RDATA_reg[14]/D
+ 16  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[15]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[15]/D
+ 17  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_asg/sys_rdata_reg[16]/C                                        ps/axi_slave_gp0/axi\\.RDATA_reg[16]/D
+ 18  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[17]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[17]/D
+ 19  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_asg/sys_rdata_reg[18]/C                                        ps/axi_slave_gp0/axi\\.RDATA_reg[18]/D
+ 20  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_asg/sys_rdata_reg[19]/C                                        ps/axi_slave_gp0/axi\\.RDATA_reg[19]/D
+ 21  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[20]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[20]/D
+ 22  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_asg/sys_rdata_reg[21]/C                                        ps/axi_slave_gp0/axi\\.RDATA_reg[21]/D
+ 23  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[22]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[22]/D
+ 24  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_asg/sys_rdata_reg[23]/C                                        ps/axi_slave_gp0/axi\\.RDATA_reg[23]/D
+ 25  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_asg/sys_rdata_reg[24]/C                                        ps/axi_slave_gp0/axi\\.RDATA_reg[24]/D
+ 26  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[25]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[25]/D
+ 27  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_scope/i_cfg/sys_rdata_reg[26]/C                                ps/axi_slave_gp0/axi\\.RDATA_reg[26]/D
+ 28  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_hk/sys_rdata_reg[27]/C                                         ps/axi_slave_gp0/axi\\.RDATA_reg[27]/D
+ 29  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_hk/sys_rdata_reg[28]/C                                         ps/axi_slave_gp0/axi\\.RDATA_reg[28]/D
+ 30  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[29]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[29]/D
+ 31  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[30]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[30]/D
+ 32  CDC-1  Critical  1-bit unknown CDC circuitry                     0  None                     i_daisy/sys_rdata_o_reg[31]/C                                    ps/axi_slave_gp0/axi\\.RDATA_reg[31]/D
+ 33  CDC-3  Info      1-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/reg_done_reg/C  sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/ctrl_done_csff_reg[0]/D
+ 34  CDC-3  Info      1-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/reg_done_reg/C  sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/ctrl_done_csff_reg[0]/D
+ 35  CDC-3  Info      1-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/reg_done_reg/C  sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/ctrl_done_csff_reg[0]/D
+ 36  CDC-3  Info      1-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/reg_done_reg/C  sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/ctrl_done_csff_reg[0]/D
+ 37  CDC-3  Info      1-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/reg_done_reg/C  sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/ctrl_done_csff_reg[0]/D
+ 38  CDC-3  Info      1-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/reg_done_reg/C  sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/ctrl_done_csff_reg[0]/D
+ 39  CDC-3  Info      1-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[6].inst_sys_bus_cdc/reg_done_reg/C  sys_bus_interconnect/for_bus[6].inst_sys_bus_cdc/ctrl_done_csff_reg[0]/D
+ 40  CDC-3  Info      1-bit synchronized with ASYNC_REG property      2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[7].inst_sys_bus_cdc/reg_done_reg/C  sys_bus_interconnect/for_bus[7].inst_sys_bus_cdc/ctrl_done_csff_reg[0]/D
+
+Source Clock: pll_adc_clk
+Destination Clock: par_clk
+CDC Type: No Common Primary Clock
+
+Row  ID      Severity  Description                                                      Depth  Exception   Source (From)                               Destination (To)
+---  ------  --------  ---------------------------------------------------------------  -----  ----------  ------------------------------------------  ----------------------------------------------
+  1  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_daisy/genblk3[0].i_test/tx_dat_reg[15]/C  i_daisy/genblk3[0].i_test/rx_dat_inc_reg/D
+  2  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_daisy/genblk3[0].i_test/tx_dat_reg[15]/C  i_daisy/genblk3[0].i_test/rx_err_inc_reg/D
+  3  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[0]/R
+  4  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[1]/R
+  5  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[2]/R
+  6  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[3]/R
+  7  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[4]/R
+  8  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[5]/R
+  9  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[6]/R
+ 10  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[7]/R
+ 11  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[8]/R
+ 12  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[9]/R
+ 13  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[10]/R
+ 14  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[11]/R
+ 15  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[12]/R
+ 16  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[13]/R
+ 17  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[14]/R
+ 18  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[15]/R
+ 19  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[16]/R
+ 20  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[17]/R
+ 21  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[18]/R
+ 22  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[19]/R
+ 23  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[20]/R
+ 24  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[21]/R
+ 25  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[22]/R
+ 26  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[23]/R
+ 27  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[24]/R
+ 28  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[25]/R
+ 29  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[26]/R
+ 30  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[27]/R
+ 31  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[28]/R
+ 32  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[29]/R
+ 33  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[30]/R
+ 34  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_dat_cnt_reg[31]/R
+ 35  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[0]/R
+ 36  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[1]/R
+ 37  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[2]/R
+ 38  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[3]/R
+ 39  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[4]/R
+ 40  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[5]/R
+ 41  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[6]/R
+ 42  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[7]/R
+ 43  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[8]/R
+ 44  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[9]/R
+ 45  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[10]/R
+ 46  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[11]/R
+ 47  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[12]/R
+ 48  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[13]/R
+ 49  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[14]/R
+ 50  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[15]/R
+ 51  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[16]/R
+ 52  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[17]/R
+ 53  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[18]/R
+ 54  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[19]/R
+ 55  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[20]/R
+ 56  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[21]/R
+ 57  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[22]/R
+ 58  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[23]/R
+ 59  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[24]/R
+ 60  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[25]/R
+ 61  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[26]/R
+ 62  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[27]/R
+ 63  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[28]/R
+ 64  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[29]/R
+ 65  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[30]/R
+ 66  CDC-15  Warning   Clock enable controlled CDC structure detected                       0  False Path  i_daisy/cfg_tst_clr_reg/C                   i_daisy/genblk3[0].i_test/rx_err_cnt_reg[31]/R
+ 67  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[0]/D
+ 68  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[1]/D
+ 69  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[2]/D
+ 70  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[3]/D
+ 71  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[4]/D
+ 72  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[5]/D
+ 73  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[6]/D
+ 74  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[7]/D
+ 75  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[8]/R
+ 76  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[9]/R
+ 77  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[10]/R
+ 78  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[11]/R
+ 79  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[12]/R
+ 80  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[13]/R
+ 81  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[14]/R
+ 82  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_datr_reg[15]/R
+ 83  CDC-1   Critical  1-bit unknown CDC circuitry                                          0  False Path  i_hk/daisy_mode_o_reg[0]/C                  i_daisy/genblk4[0].rxp_dvr_reg[0]/S
+ 84  CDC-13  Critical  1-bit CDC path on a non-FD primitive                                 0  False Path  i_daisy/cfg_rx_en_reg/C                     i_daisy/i_rx/genblk1[0].i_iserdese/RST
+ 85  CDC-2   Warning   1-bit synchronized with missing ASYNC_REG property                   3  False Path  i_daisy/cfg_rx_train_reg/C                  i_daisy/i_rx/genblk1[0].par_train_r_reg[0]/D
+ 86  CDC-8   Warning   Asynchronous reset synchronized with missing ASYNC_REG property     18  False Path  i_daisy/cfg_rx_en_reg/C                     i_daisy/i_rx/par_rstn_r_reg[0]/CLR
+
+Source Clock: adc_clk
+Destination Clock: pll_adc_clk
+CDC Type: User Ignored
+
+Row  ID      Severity  Description                           Depth  Exception   Source (From)     Destination (To)
+---  ------  --------  ------------------------------------  -----  ----------  ----------------  ---------------------------
+  1  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][2]   adc_dat_reg[0][0]/D
+  2  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][3]   adc_dat_reg[0][1]/D
+  3  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][4]   adc_dat_reg[0][2]/D
+  4  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][5]   adc_dat_reg[0][3]/D
+  5  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][6]   adc_dat_reg[0][4]/D
+  6  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][7]   adc_dat_reg[0][5]/D
+  7  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][8]   adc_dat_reg[0][6]/D
+  8  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][9]   adc_dat_reg[0][7]/D
+  9  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][10]  adc_dat_reg[0][8]/D
+ 10  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][11]  adc_dat_reg[0][9]/D
+ 11  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][12]  adc_dat_reg[0][10]/D
+ 12  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][13]  adc_dat_reg[0][11]/D
+ 13  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][14]  adc_dat_reg[0][12]/D
+ 14  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[0][15]  adc_dat_reg[0][13]/D
+ 15  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][2]   adc_dat_reg[1][0]/D
+ 16  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][3]   adc_dat_reg[1][1]/D
+ 17  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][4]   adc_dat_reg[1][2]/D
+ 18  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][5]   adc_dat_reg[1][3]/D
+ 19  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][6]   adc_dat_reg[1][4]/D
+ 20  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][7]   adc_dat_reg[1][5]/D
+ 21  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][8]   adc_dat_reg[1][6]/D
+ 22  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][9]   adc_dat_reg[1][7]/D
+ 23  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][10]  adc_dat_reg[1][8]/D
+ 24  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][11]  adc_dat_reg[1][9]/D
+ 25  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][12]  adc_dat_reg[1][10]/D
+ 26  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][13]  adc_dat_reg[1][11]/D
+ 27  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][14]  adc_dat_reg[1][12]/D
+ 28  CDC-1   Critical  1-bit unknown CDC circuitry               0  False Path  adc_dat_i[1][15]  adc_dat_reg[1][13]/D
+ 29  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][2]   i_pid/i_pid11/int_sum/A[0]
+ 30  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][3]   i_pid/i_pid11/int_sum/A[1]
+ 31  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][4]   i_pid/i_pid11/int_sum/A[2]
+ 32  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][5]   i_pid/i_pid11/int_sum/A[3]
+ 33  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][6]   i_pid/i_pid11/int_sum/A[4]
+ 34  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][7]   i_pid/i_pid11/int_sum/A[5]
+ 35  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][8]   i_pid/i_pid11/int_sum/A[6]
+ 36  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][9]   i_pid/i_pid11/int_sum/A[7]
+ 37  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][10]  i_pid/i_pid11/int_sum/A[8]
+ 38  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][11]  i_pid/i_pid11/int_sum/A[9]
+ 39  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][12]  i_pid/i_pid11/int_sum/A[10]
+ 40  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][13]  i_pid/i_pid11/int_sum/A[11]
+ 41  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][14]  i_pid/i_pid11/int_sum/A[12]
+ 42  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[13]
+ 43  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[14]
+ 44  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[15]
+ 45  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[16]
+ 46  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[17]
+ 47  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[18]
+ 48  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[19]
+ 49  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[20]
+ 50  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[21]
+ 51  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[22]
+ 52  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[23]
+ 53  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[24]
+ 54  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[25]
+ 55  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[26]
+ 56  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[27]
+ 57  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[28]
+ 58  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/int_sum/A[29]
+ 59  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][2]   i_pid/i_pid11/kd_mult/A[0]
+ 60  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][3]   i_pid/i_pid11/kd_mult/A[1]
+ 61  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][4]   i_pid/i_pid11/kd_mult/A[2]
+ 62  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][5]   i_pid/i_pid11/kd_mult/A[3]
+ 63  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][6]   i_pid/i_pid11/kd_mult/A[4]
+ 64  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][7]   i_pid/i_pid11/kd_mult/A[5]
+ 65  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][8]   i_pid/i_pid11/kd_mult/A[6]
+ 66  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][9]   i_pid/i_pid11/kd_mult/A[7]
+ 67  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][10]  i_pid/i_pid11/kd_mult/A[8]
+ 68  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][11]  i_pid/i_pid11/kd_mult/A[9]
+ 69  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][12]  i_pid/i_pid11/kd_mult/A[10]
+ 70  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][13]  i_pid/i_pid11/kd_mult/A[11]
+ 71  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][14]  i_pid/i_pid11/kd_mult/A[12]
+ 72  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[13]
+ 73  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[14]
+ 74  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[15]
+ 75  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[16]
+ 76  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[17]
+ 77  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[18]
+ 78  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[19]
+ 79  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[20]
+ 80  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[21]
+ 81  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[22]
+ 82  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[23]
+ 83  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[24]
+ 84  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[25]
+ 85  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[26]
+ 86  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[27]
+ 87  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[28]
+ 88  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kd_mult/A[29]
+ 89  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][2]   i_pid/i_pid11/kp_mult/A[0]
+ 90  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][3]   i_pid/i_pid11/kp_mult/A[1]
+ 91  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][4]   i_pid/i_pid11/kp_mult/A[2]
+ 92  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][5]   i_pid/i_pid11/kp_mult/A[3]
+ 93  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][6]   i_pid/i_pid11/kp_mult/A[4]
+ 94  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][7]   i_pid/i_pid11/kp_mult/A[5]
+ 95  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][8]   i_pid/i_pid11/kp_mult/A[6]
+ 96  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][9]   i_pid/i_pid11/kp_mult/A[7]
+ 97  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][10]  i_pid/i_pid11/kp_mult/A[8]
+ 98  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][11]  i_pid/i_pid11/kp_mult/A[9]
+ 99  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][12]  i_pid/i_pid11/kp_mult/A[10]
+100  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][13]  i_pid/i_pid11/kp_mult/A[11]
+101  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][14]  i_pid/i_pid11/kp_mult/A[12]
+102  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[13]
+103  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[14]
+104  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[15]
+105  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[16]
+106  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[17]
+107  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[18]
+108  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[19]
+109  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[20]
+110  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[21]
+111  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[22]
+112  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[23]
+113  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[24]
+114  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[25]
+115  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[26]
+116  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[27]
+117  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[28]
+118  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid11/kp_mult/A[29]
+119  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][2]   i_pid/i_pid12/int_sum/A[0]
+120  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][3]   i_pid/i_pid12/int_sum/A[1]
+121  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][4]   i_pid/i_pid12/int_sum/A[2]
+122  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][5]   i_pid/i_pid12/int_sum/A[3]
+123  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][6]   i_pid/i_pid12/int_sum/A[4]
+124  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][7]   i_pid/i_pid12/int_sum/A[5]
+125  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][8]   i_pid/i_pid12/int_sum/A[6]
+126  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][9]   i_pid/i_pid12/int_sum/A[7]
+127  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][10]  i_pid/i_pid12/int_sum/A[8]
+128  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][11]  i_pid/i_pid12/int_sum/A[9]
+129  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][12]  i_pid/i_pid12/int_sum/A[10]
+130  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][13]  i_pid/i_pid12/int_sum/A[11]
+131  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][14]  i_pid/i_pid12/int_sum/A[12]
+132  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[13]
+133  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[14]
+134  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[15]
+135  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[16]
+136  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[17]
+137  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[18]
+138  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[19]
+139  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[20]
+140  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[21]
+141  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[22]
+142  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[23]
+143  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[24]
+144  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[25]
+145  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[26]
+146  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[27]
+147  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[28]
+148  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/int_sum/A[29]
+149  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][2]   i_pid/i_pid12/kd_mult/A[0]
+150  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][3]   i_pid/i_pid12/kd_mult/A[1]
+151  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][4]   i_pid/i_pid12/kd_mult/A[2]
+152  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][5]   i_pid/i_pid12/kd_mult/A[3]
+153  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][6]   i_pid/i_pid12/kd_mult/A[4]
+154  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][7]   i_pid/i_pid12/kd_mult/A[5]
+155  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][8]   i_pid/i_pid12/kd_mult/A[6]
+156  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][9]   i_pid/i_pid12/kd_mult/A[7]
+157  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][10]  i_pid/i_pid12/kd_mult/A[8]
+158  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][11]  i_pid/i_pid12/kd_mult/A[9]
+159  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][12]  i_pid/i_pid12/kd_mult/A[10]
+160  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][13]  i_pid/i_pid12/kd_mult/A[11]
+161  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][14]  i_pid/i_pid12/kd_mult/A[12]
+162  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[13]
+163  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[14]
+164  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[15]
+165  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[16]
+166  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[17]
+167  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[18]
+168  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[19]
+169  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[20]
+170  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[21]
+171  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[22]
+172  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[23]
+173  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[24]
+174  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[25]
+175  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[26]
+176  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[27]
+177  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[28]
+178  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kd_mult/A[29]
+179  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][2]   i_pid/i_pid12/kp_mult/A[0]
+180  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][3]   i_pid/i_pid12/kp_mult/A[1]
+181  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][4]   i_pid/i_pid12/kp_mult/A[2]
+182  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][5]   i_pid/i_pid12/kp_mult/A[3]
+183  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][6]   i_pid/i_pid12/kp_mult/A[4]
+184  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][7]   i_pid/i_pid12/kp_mult/A[5]
+185  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][8]   i_pid/i_pid12/kp_mult/A[6]
+186  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][9]   i_pid/i_pid12/kp_mult/A[7]
+187  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][10]  i_pid/i_pid12/kp_mult/A[8]
+188  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][11]  i_pid/i_pid12/kp_mult/A[9]
+189  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][12]  i_pid/i_pid12/kp_mult/A[10]
+190  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][13]  i_pid/i_pid12/kp_mult/A[11]
+191  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][14]  i_pid/i_pid12/kp_mult/A[12]
+192  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[13]
+193  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[14]
+194  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[15]
+195  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[16]
+196  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[17]
+197  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[18]
+198  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[19]
+199  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[20]
+200  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[21]
+201  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[22]
+202  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[23]
+203  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[24]
+204  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[25]
+205  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[26]
+206  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[27]
+207  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[28]
+208  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid12/kp_mult/A[29]
+209  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][2]   i_pid/i_pid21/int_sum/A[0]
+210  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][3]   i_pid/i_pid21/int_sum/A[1]
+211  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][4]   i_pid/i_pid21/int_sum/A[2]
+212  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][5]   i_pid/i_pid21/int_sum/A[3]
+213  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][6]   i_pid/i_pid21/int_sum/A[4]
+214  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][7]   i_pid/i_pid21/int_sum/A[5]
+215  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][8]   i_pid/i_pid21/int_sum/A[6]
+216  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][9]   i_pid/i_pid21/int_sum/A[7]
+217  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][10]  i_pid/i_pid21/int_sum/A[8]
+218  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][11]  i_pid/i_pid21/int_sum/A[9]
+219  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][12]  i_pid/i_pid21/int_sum/A[10]
+220  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][13]  i_pid/i_pid21/int_sum/A[11]
+221  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][14]  i_pid/i_pid21/int_sum/A[12]
+222  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[13]
+223  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[14]
+224  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[15]
+225  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[16]
+226  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[17]
+227  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[18]
+228  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[19]
+229  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[20]
+230  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[21]
+231  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[22]
+232  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[23]
+233  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[24]
+234  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[25]
+235  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[26]
+236  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[27]
+237  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[28]
+238  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/int_sum/A[29]
+239  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][2]   i_pid/i_pid21/kd_mult/A[0]
+240  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][3]   i_pid/i_pid21/kd_mult/A[1]
+241  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][4]   i_pid/i_pid21/kd_mult/A[2]
+242  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][5]   i_pid/i_pid21/kd_mult/A[3]
+243  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][6]   i_pid/i_pid21/kd_mult/A[4]
+244  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][7]   i_pid/i_pid21/kd_mult/A[5]
+245  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][8]   i_pid/i_pid21/kd_mult/A[6]
+246  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][9]   i_pid/i_pid21/kd_mult/A[7]
+247  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][10]  i_pid/i_pid21/kd_mult/A[8]
+248  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][11]  i_pid/i_pid21/kd_mult/A[9]
+249  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][12]  i_pid/i_pid21/kd_mult/A[10]
+250  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][13]  i_pid/i_pid21/kd_mult/A[11]
+251  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][14]  i_pid/i_pid21/kd_mult/A[12]
+252  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[13]
+253  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[14]
+254  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[15]
+255  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[16]
+256  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[17]
+257  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[18]
+258  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[19]
+259  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[20]
+260  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[21]
+261  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[22]
+262  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[23]
+263  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[24]
+264  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[25]
+265  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[26]
+266  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[27]
+267  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[28]
+268  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kd_mult/A[29]
+269  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][2]   i_pid/i_pid21/kp_mult/A[0]
+270  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][3]   i_pid/i_pid21/kp_mult/A[1]
+271  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][4]   i_pid/i_pid21/kp_mult/A[2]
+272  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][5]   i_pid/i_pid21/kp_mult/A[3]
+273  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][6]   i_pid/i_pid21/kp_mult/A[4]
+274  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][7]   i_pid/i_pid21/kp_mult/A[5]
+275  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][8]   i_pid/i_pid21/kp_mult/A[6]
+276  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][9]   i_pid/i_pid21/kp_mult/A[7]
+277  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][10]  i_pid/i_pid21/kp_mult/A[8]
+278  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][11]  i_pid/i_pid21/kp_mult/A[9]
+279  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][12]  i_pid/i_pid21/kp_mult/A[10]
+280  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][13]  i_pid/i_pid21/kp_mult/A[11]
+281  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][14]  i_pid/i_pid21/kp_mult/A[12]
+282  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[13]
+283  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[14]
+284  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[15]
+285  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[16]
+286  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[17]
+287  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[18]
+288  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[19]
+289  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[20]
+290  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[21]
+291  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[22]
+292  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[23]
+293  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[24]
+294  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[25]
+295  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[26]
+296  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[27]
+297  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[28]
+298  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[0][15]  i_pid/i_pid21/kp_mult/A[29]
+299  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][2]   i_pid/i_pid22/int_sum/A[0]
+300  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][3]   i_pid/i_pid22/int_sum/A[1]
+301  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][4]   i_pid/i_pid22/int_sum/A[2]
+302  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][5]   i_pid/i_pid22/int_sum/A[3]
+303  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][6]   i_pid/i_pid22/int_sum/A[4]
+304  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][7]   i_pid/i_pid22/int_sum/A[5]
+305  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][8]   i_pid/i_pid22/int_sum/A[6]
+306  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][9]   i_pid/i_pid22/int_sum/A[7]
+307  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][10]  i_pid/i_pid22/int_sum/A[8]
+308  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][11]  i_pid/i_pid22/int_sum/A[9]
+309  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][12]  i_pid/i_pid22/int_sum/A[10]
+310  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][13]  i_pid/i_pid22/int_sum/A[11]
+311  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][14]  i_pid/i_pid22/int_sum/A[12]
+312  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[13]
+313  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[14]
+314  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[15]
+315  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[16]
+316  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[17]
+317  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[18]
+318  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[19]
+319  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[20]
+320  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[21]
+321  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[22]
+322  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[23]
+323  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[24]
+324  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[25]
+325  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[26]
+326  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[27]
+327  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[28]
+328  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/int_sum/A[29]
+329  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][2]   i_pid/i_pid22/kd_mult/A[0]
+330  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][3]   i_pid/i_pid22/kd_mult/A[1]
+331  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][4]   i_pid/i_pid22/kd_mult/A[2]
+332  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][5]   i_pid/i_pid22/kd_mult/A[3]
+333  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][6]   i_pid/i_pid22/kd_mult/A[4]
+334  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][7]   i_pid/i_pid22/kd_mult/A[5]
+335  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][8]   i_pid/i_pid22/kd_mult/A[6]
+336  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][9]   i_pid/i_pid22/kd_mult/A[7]
+337  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][10]  i_pid/i_pid22/kd_mult/A[8]
+338  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][11]  i_pid/i_pid22/kd_mult/A[9]
+339  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][12]  i_pid/i_pid22/kd_mult/A[10]
+340  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][13]  i_pid/i_pid22/kd_mult/A[11]
+341  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][14]  i_pid/i_pid22/kd_mult/A[12]
+342  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[13]
+343  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[14]
+344  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[15]
+345  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[16]
+346  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[17]
+347  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[18]
+348  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[19]
+349  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[20]
+350  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[21]
+351  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[22]
+352  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[23]
+353  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[24]
+354  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[25]
+355  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[26]
+356  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[27]
+357  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[28]
+358  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kd_mult/A[29]
+359  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][2]   i_pid/i_pid22/kp_mult/A[0]
+360  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][3]   i_pid/i_pid22/kp_mult/A[1]
+361  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][4]   i_pid/i_pid22/kp_mult/A[2]
+362  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][5]   i_pid/i_pid22/kp_mult/A[3]
+363  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][6]   i_pid/i_pid22/kp_mult/A[4]
+364  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][7]   i_pid/i_pid22/kp_mult/A[5]
+365  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][8]   i_pid/i_pid22/kp_mult/A[6]
+366  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][9]   i_pid/i_pid22/kp_mult/A[7]
+367  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][10]  i_pid/i_pid22/kp_mult/A[8]
+368  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][11]  i_pid/i_pid22/kp_mult/A[9]
+369  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][12]  i_pid/i_pid22/kp_mult/A[10]
+370  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][13]  i_pid/i_pid22/kp_mult/A[11]
+371  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][14]  i_pid/i_pid22/kp_mult/A[12]
+372  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[13]
+373  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[14]
+374  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[15]
+375  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[16]
+376  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[17]
+377  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[18]
+378  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[19]
+379  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[20]
+380  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[21]
+381  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[22]
+382  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[23]
+383  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[24]
+384  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[25]
+385  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[26]
+386  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[27]
+387  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[28]
+388  CDC-13  Critical  1-bit CDC path on a non-FD primitive      0  False Path  adc_dat_i[1][15]  i_pid/i_pid22/kp_mult/A[29]
+
+Source Clock: clk_fpga_0
+Destination Clock: pll_adc_clk
+CDC Type: No Common Primary Clock
+
+Row  ID      Severity  Description                                     Depth  Exception                Source (From)                                                   Destination (To)
+---  ------  --------  ----------------------------------------------  -----  -----------------------  --------------------------------------------------------------  -----------------------------------------------------------------------------------
+  1  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  i_hk/i_freq_meter/ref_gate_reg/C                                i_hk/i_freq_meter/mes_gate_csff_reg[0]/D
+  2  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[0]/D
+  3  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[1]/D
+  4  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[2]/D
+  5  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[3]/D
+  6  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[4]/D
+  7  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[5]/D
+  8  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[6]/D
+  9  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[7]/D
+ 10  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[8]/D
+ 11  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[9]/D
+ 12  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[10]/D
+ 13  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[11]/D
+ 14  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[12]/D
+ 15  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[13]/D
+ 16  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[14]/D
+ 17  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[15]/D
+ 18  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[16]/D
+ 19  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[17]/D
+ 20  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[18]/D
+ 21  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.addr_reg[19]/D
+ 22  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[0]/C                              sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[0]/D
+ 23  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[1]/C                              sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[1]/D
+ 24  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[2]/C                              sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[2]/D
+ 25  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[3]/C                              sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[3]/D
+ 26  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[4]/C                              sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[4]/D
+ 27  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[5]/C                              sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[5]/D
+ 28  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[6]/C                              sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[6]/D
+ 29  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[7]/C                              sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[7]/D
+ 30  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[8]/C                              sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[8]/D
+ 31  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[9]/C                              sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[9]/D
+ 32  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[10]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[10]/D
+ 33  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[11]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[11]/D
+ 34  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[12]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[12]/D
+ 35  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]/D
+ 36  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[14]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[14]/D
+ 37  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[15]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[15]/D
+ 38  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[16]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[16]/D
+ 39  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[17]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[17]/D
+ 40  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[18]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[18]/D
+ 41  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[19]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[19]/D
+ 42  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[20]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[20]/D
+ 43  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[21]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[21]/D
+ 44  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[22]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[22]/D
+ 45  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[23]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[23]/D
+ 46  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[24]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[24]/D
+ 47  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[25]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[25]/D
+ 48  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[26]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[26]/D
+ 49  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[27]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[27]/D
+ 50  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[28]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[28]/D
+ 51  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[29]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[29]/D
+ 52  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[30]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[30]/D
+ 53  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[31]/C                             sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/bus_m\\.wdata_reg[31]/D
+ 54  CDC-3   Info      1-bit synchronized with ASYNC_REG property          3  Max Delay Datapath Only  sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/ctrl_do_reg/C  sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/reg_do_csff_reg[0]/D
+ 55  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/ctrl_re_reg/C  sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/reg_re_csff_reg[0]/D
+ 56  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/ctrl_we_reg/C  sys_bus_interconnect/for_bus[0].inst_sys_bus_cdc/reg_we_csff_reg[0]/D
+ 57  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[0]/D
+ 58  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[1]/D
+ 59  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[2]/D
+ 60  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[3]/D
+ 61  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[4]/D
+ 62  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[4]_rep/D
+ 63  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[4]_rep__0/D
+ 64  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[4]_rep__1/D
+ 65  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[5]/D
+ 66  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[5]_rep/D
+ 67  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[5]_rep__0/D
+ 68  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[5]_rep__1/D
+ 69  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[6]/D
+ 70  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[7]/D
+ 71  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[8]/D
+ 72  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[8]_rep/D
+ 73  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[9]/D
+ 74  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[9]_rep/D
+ 75  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[9]_rep__0/D
+ 76  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[9]_rep__1/D
+ 77  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[10]/D
+ 78  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[11]/D
+ 79  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[12]/D
+ 80  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[13]/D
+ 81  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[14]/D
+ 82  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[15]/D
+ 83  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[16]/D
+ 84  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[17]/D
+ 85  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[18]/D
+ 86  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.addr_reg[19]/D
+ 87  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[0]/C                              sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[0]/D
+ 88  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[1]/C                              sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[1]/D
+ 89  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[2]/C                              sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[2]/D
+ 90  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[3]/C                              sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[3]/D
+ 91  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[4]/C                              sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[4]/D
+ 92  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[5]/C                              sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[5]/D
+ 93  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[6]/C                              sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[6]/D
+ 94  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[7]/C                              sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[7]/D
+ 95  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[8]/C                              sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[8]/D
+ 96  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[9]/C                              sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[9]/D
+ 97  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[10]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[10]/D
+ 98  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[11]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[11]/D
+ 99  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[12]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[12]/D
+100  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]/D
+101  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[14]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[14]/D
+102  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[15]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[15]/D
+103  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[16]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[16]/D
+104  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[17]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[17]/D
+105  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[18]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[18]/D
+106  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[19]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[19]/D
+107  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[20]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[20]/D
+108  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[21]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[21]/D
+109  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[22]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[22]/D
+110  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[23]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[23]/D
+111  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[24]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[24]/D
+112  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[25]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[25]/D
+113  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[26]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[26]/D
+114  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[27]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[27]/D
+115  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[28]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[28]/D
+116  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[29]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[29]/D
+117  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[30]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[30]/D
+118  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[31]/C                             sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/bus_m\\.wdata_reg[31]/D
+119  CDC-3   Info      1-bit synchronized with ASYNC_REG property          3  Max Delay Datapath Only  sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/ctrl_do_reg/C  sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/reg_do_csff_reg[0]/D
+120  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/ctrl_re_reg/C  sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/reg_re_csff_reg[0]/D
+121  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/ctrl_we_reg/C  sys_bus_interconnect/for_bus[1].inst_sys_bus_cdc/reg_we_csff_reg[0]/D
+122  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[0]/D
+123  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[1]/D
+124  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[2]/D
+125  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[3]/D
+126  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[3]_rep/D
+127  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[4]/D
+128  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[4]_rep/D
+129  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[5]/D
+130  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[5]_rep/D
+131  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[5]_rep__0/D
+132  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[5]_rep__1/D
+133  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[6]/D
+134  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[6]_rep/D
+135  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[6]_rep__0/D
+136  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[7]/D
+137  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[8]/D
+138  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[9]/D
+139  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[10]/D
+140  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[11]/D
+141  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[12]/D
+142  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[13]/D
+143  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[14]/D
+144  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[15]/D
+145  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[16]/D
+146  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[17]/D
+147  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[18]/D
+148  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.addr_reg[19]/D
+149  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[0]/C                              sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[0]/D
+150  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[1]/C                              sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[1]/D
+151  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[2]/C                              sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[2]/D
+152  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[3]/C                              sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[3]/D
+153  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[4]/C                              sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[4]/D
+154  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[5]/C                              sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[5]/D
+155  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[6]/C                              sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[6]/D
+156  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[7]/C                              sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[7]/D
+157  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[8]/C                              sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[8]/D
+158  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[9]/C                              sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[9]/D
+159  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[10]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[10]/D
+160  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[11]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[11]/D
+161  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[12]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[12]/D
+162  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]/D
+163  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[14]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[14]/D
+164  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[15]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[15]/D
+165  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[16]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[16]/D
+166  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[17]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[17]/D
+167  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[18]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[18]/D
+168  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[19]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[19]/D
+169  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[20]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[20]/D
+170  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[21]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[21]/D
+171  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[22]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[22]/D
+172  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[23]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[23]/D
+173  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[24]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[24]/D
+174  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[25]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[25]/D
+175  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[26]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[26]/D
+176  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[27]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[27]/D
+177  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[28]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[28]/D
+178  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[29]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[29]/D
+179  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[30]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[30]/D
+180  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[31]/C                             sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/bus_m\\.wdata_reg[31]/D
+181  CDC-3   Info      1-bit synchronized with ASYNC_REG property          3  Max Delay Datapath Only  sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/ctrl_do_reg/C  sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/reg_do_csff_reg[0]/D
+182  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/ctrl_re_reg/C  sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/reg_re_csff_reg[0]/D
+183  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/ctrl_we_reg/C  sys_bus_interconnect/for_bus[2].inst_sys_bus_cdc/reg_we_csff_reg[0]/D
+184  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[0]/D
+185  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[1]/D
+186  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[2]/D
+187  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[3]/D
+188  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[4]/D
+189  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[5]/D
+190  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[6]/D
+191  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[7]/D
+192  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[8]/D
+193  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[9]/D
+194  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[10]/D
+195  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[11]/D
+196  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[12]/D
+197  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[13]/D
+198  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[14]/D
+199  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[15]/D
+200  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[16]/D
+201  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[17]/D
+202  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[18]/D
+203  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.addr_reg[19]/D
+204  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[0]/C                              sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[0]/D
+205  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[1]/C                              sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[1]/D
+206  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[2]/C                              sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[2]/D
+207  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[3]/C                              sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[3]/D
+208  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[4]/C                              sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[4]/D
+209  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[5]/C                              sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[5]/D
+210  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[6]/C                              sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[6]/D
+211  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[7]/C                              sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[7]/D
+212  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[8]/C                              sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[8]/D
+213  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[9]/C                              sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[9]/D
+214  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[10]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[10]/D
+215  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[11]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[11]/D
+216  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[12]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[12]/D
+217  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]/D
+218  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep/D
+219  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep__0/D
+220  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep__1/D
+221  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep__2/D
+222  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep__3/D
+223  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep__4/D
+224  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep__5/D
+225  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep__6/D
+226  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep__7/D
+227  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep__8/D
+228  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep__9/D
+229  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep/D
+230  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep__0/D
+231  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep__1/D
+232  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep__2/D
+233  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep__3/D
+234  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep__4/D
+235  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep__5/D
+236  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep__6/D
+237  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep__7/D
+238  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep__8/D
+239  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[13]/C                             sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/bus_m\\.wdata_reg[13]_rep_rep__9/D
+240  CDC-3   Info      1-bit synchronized with ASYNC_REG property          3  Max Delay Datapath Only  sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/ctrl_do_reg/C  sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/reg_do_csff_reg[0]/D
+241  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/ctrl_re_reg/C  sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/reg_re_csff_reg[0]/D
+242  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/ctrl_we_reg/C  sys_bus_interconnect/for_bus[3].inst_sys_bus_cdc/reg_we_csff_reg[0]/D
+243  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[0]/D
+244  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[1]/D
+245  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[2]/D
+246  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[3]/D
+247  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[4]/D
+248  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[5]/D
+249  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[6]/D
+250  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[7]/D
+251  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[8]/D
+252  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[9]/D
+253  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[10]/D
+254  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[11]/D
+255  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[12]/D
+256  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[13]/D
+257  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[14]/D
+258  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[15]/D
+259  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[16]/D
+260  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[17]/D
+261  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[18]/D
+262  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.addr_reg[19]/D
+263  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[16]/C                             sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.wdata_reg[16]/D
+264  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[17]/C                             sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.wdata_reg[17]/D
+265  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[18]/C                             sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.wdata_reg[18]/D
+266  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[19]/C                             sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.wdata_reg[19]/D
+267  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[20]/C                             sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.wdata_reg[20]/D
+268  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[21]/C                             sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.wdata_reg[21]/D
+269  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[22]/C                             sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.wdata_reg[22]/D
+270  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[23]/C                             sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/bus_m\\.wdata_reg[23]/D
+271  CDC-3   Info      1-bit synchronized with ASYNC_REG property          3  Max Delay Datapath Only  sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/ctrl_do_reg/C  sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/reg_do_csff_reg[0]/D
+272  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/ctrl_re_reg/C  sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/reg_re_csff_reg[0]/D
+273  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/ctrl_we_reg/C  sys_bus_interconnect/for_bus[4].inst_sys_bus_cdc/reg_we_csff_reg[0]/D
+274  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[0]/D
+275  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[1]/D
+276  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[2]/D
+277  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[3]/D
+278  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[4]/D
+279  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[5]/D
+280  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[6]/D
+281  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[7]/D
+282  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[8]/D
+283  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[9]/D
+284  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[10]/D
+285  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[11]/D
+286  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[12]/D
+287  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[13]/D
+288  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[14]/D
+289  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[15]/D
+290  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[16]/D
+291  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[17]/D
+292  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[18]/D
+293  CDC-15  Warning   Clock enable controlled CDC structure detected      0  Max Delay Datapath Only  ps/axi_slave_gp0/rd_do_reg/C                                    sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.addr_reg[19]/D
+294  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[0]/C                              sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[0]/D
+295  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[1]/C                              sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[1]/D
+296  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[2]/C                              sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[2]/D
+297  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[16]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[16]/D
+298  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[17]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[17]/D
+299  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[18]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[18]/D
+300  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[19]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[19]/D
+301  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[20]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[20]/D
+302  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[21]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[21]/D
+303  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[22]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[22]/D
+304  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[23]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[23]/D
+305  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[24]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[24]/D
+306  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[25]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[25]/D
+307  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[26]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[26]/D
+308  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[27]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[27]/D
+309  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[28]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[28]/D
+310  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[29]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[29]/D
+311  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[30]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[30]/D
+312  CDC-15  Warning   Clock enable controlled CDC structure detected      0  False Path               ps/axi_slave_gp0/wr_wdata_reg[31]/C                             sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/bus_m\\.wdata_reg[31]/D
+313  CDC-3   Info      1-bit synchronized with ASYNC_REG property          3  Max Delay Datapath Only  sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/ctrl_do_reg/C  sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/reg_do_csff_reg[0]/D
+314  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/ctrl_re_reg/C  sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/reg_re_csff_reg[0]/D
+315  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/ctrl_we_reg/C  sys_bus_interconnect/for_bus[5].inst_sys_bus_cdc/reg_we_csff_reg[0]/D
+316  CDC-3   Info      1-bit synchronized with ASYNC_REG property          3  Max Delay Datapath Only  sys_bus_interconnect/for_bus[6].inst_sys_bus_cdc/ctrl_do_reg/C  sys_bus_interconnect/for_bus[6].inst_sys_bus_cdc/reg_do_csff_reg[0]/D
+317  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[6].inst_sys_bus_cdc/ctrl_re_reg/C  sys_bus_interconnect/for_bus[6].inst_sys_bus_cdc/reg_re_csff_reg[0]/D
+318  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[6].inst_sys_bus_cdc/ctrl_we_reg/C  sys_bus_interconnect/for_bus[6].inst_sys_bus_cdc/reg_we_csff_reg[0]/D
+319  CDC-3   Info      1-bit synchronized with ASYNC_REG property          3  Max Delay Datapath Only  sys_bus_interconnect/for_bus[7].inst_sys_bus_cdc/ctrl_do_reg/C  sys_bus_interconnect/for_bus[7].inst_sys_bus_cdc/reg_do_csff_reg[0]/D
+320  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[7].inst_sys_bus_cdc/ctrl_re_reg/C  sys_bus_interconnect/for_bus[7].inst_sys_bus_cdc/reg_re_csff_reg[0]/D
+321  CDC-3   Info      1-bit synchronized with ASYNC_REG property          2  Max Delay Datapath Only  sys_bus_interconnect/for_bus[7].inst_sys_bus_cdc/ctrl_we_reg/C  sys_bus_interconnect/for_bus[7].inst_sys_bus_cdc/reg_we_csff_reg[0]/D
+
+Source Clock: input port clock
+Destination Clock: pll_adc_clk
+CDC Type: No Common Primary Clock
+
+Row  ID     Severity  Description                                 Depth  Exception   Source (From)  Destination (To)
+---  -----  --------  ------------------------------------------  -----  ----------  -------------  --------------------
+  1  CDC-3  Info      1-bit synchronized with ASYNC_REG property      3  False Path  exp_p_io[0]    e1_tag/e1_meta_reg/D
+
+Source Clock: par_clk
+Destination Clock: pll_adc_clk
+CDC Type: No Common Primary Clock
+
+Row  ID      Severity  Description                                         Depth  Exception   Source (From)                                     Destination (To)
+---  ------  --------  --------------------------------------------------  -----  ----------  ------------------------------------------------  --------------------------------------
+  1  CDC-10  Critical  Combinational logic detected before a synchronizer      2  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/ext_trig_in_reg[0]/D
+  2  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[0]/CE
+  3  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[1]/CE
+  4  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[2]/CE
+  5  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[3]/CE
+  6  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[4]/CE
+  7  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[5]/CE
+  8  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[6]/CE
+  9  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[7]/CE
+ 10  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[8]/CE
+ 11  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[9]/CE
+ 12  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[10]/CE
+ 13  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[11]/CE
+ 14  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[12]/CE
+ 15  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[13]/CE
+ 16  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[14]/CE
+ 17  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chA/rep_cnt_reg[15]/CE
+ 18  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[0]/CE
+ 19  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[1]/CE
+ 20  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[2]/CE
+ 21  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[3]/CE
+ 22  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[4]/CE
+ 23  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[5]/CE
+ 24  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[6]/CE
+ 25  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[7]/CE
+ 26  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[8]/CE
+ 27  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[9]/CE
+ 28  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[10]/CE
+ 29  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[11]/CE
+ 30  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[12]/CE
+ 31  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[13]/CE
+ 32  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[14]/CE
+ 33  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_datr_reg[8]/C              i_asg/chB/rep_cnt_reg[15]/CE
+ 34  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[0]/C             i_daisy/genblk4[0].tx_rx_dat_reg[0]/D
+ 35  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[1]/C             i_daisy/genblk4[0].tx_rx_dat_reg[1]/D
+ 36  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[2]/C             i_daisy/genblk4[0].tx_rx_dat_reg[2]/D
+ 37  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[3]/C             i_daisy/genblk4[0].tx_rx_dat_reg[3]/D
+ 38  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[4]/C             i_daisy/genblk4[0].tx_rx_dat_reg[4]/D
+ 39  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[5]/C             i_daisy/genblk4[0].tx_rx_dat_reg[5]/D
+ 40  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[6]/C             i_daisy/genblk4[0].tx_rx_dat_reg[6]/D
+ 41  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[7]/C             i_daisy/genblk4[0].tx_rx_dat_reg[7]/D
+ 42  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[8]/C             i_daisy/genblk4[0].tx_rx_dat_reg[8]/D
+ 43  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[9]/C             i_daisy/genblk4[0].tx_rx_dat_reg[9]/D
+ 44  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[10]/C            i_daisy/genblk4[0].tx_rx_dat_reg[10]/D
+ 45  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[11]/C            i_daisy/genblk4[0].tx_rx_dat_reg[11]/D
+ 46  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[12]/C            i_daisy/genblk4[0].tx_rx_dat_reg[12]/D
+ 47  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[13]/C            i_daisy/genblk4[0].tx_rx_dat_reg[13]/D
+ 48  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[14]/C            i_daisy/genblk4[0].tx_rx_dat_reg[14]/D
+ 49  CDC-15  Warning   Clock enable controlled CDC structure detected          0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[15]/C            i_daisy/genblk4[0].tx_rx_dat_reg[15]/D
+ 50  CDC-2   Warning   1-bit synchronized with missing ASYNC_REG property      3  False Path  i_daisy/genblk4[0].rxp_dv_n_reg/C                 i_daisy/genblk4[0].tx_rx_new_reg[0]/D
+ 51  CDC-4   Critical  Multi-bit unknown CDC circuitry                         0  False Path  i_daisy/i_rx/genblk1[0].par_dat_or_reg[15:0]/C    i_daisy/rxp_dat_sys_reg[15:0]/D
+ 52  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[0]/C             i_daisy/rxp_dat_sys_reg[16]/D
+ 53  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[1]/C             i_daisy/rxp_dat_sys_reg[17]/D
+ 54  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[2]/C             i_daisy/rxp_dat_sys_reg[18]/D
+ 55  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[3]/C             i_daisy/rxp_dat_sys_reg[19]/D
+ 56  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[4]/C             i_daisy/rxp_dat_sys_reg[20]/D
+ 57  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[5]/C             i_daisy/rxp_dat_sys_reg[21]/D
+ 58  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[6]/C             i_daisy/rxp_dat_sys_reg[22]/D
+ 59  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[7]/C             i_daisy/rxp_dat_sys_reg[23]/D
+ 60  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[8]/C             i_daisy/rxp_dat_sys_reg[24]/D
+ 61  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[9]/C             i_daisy/rxp_dat_sys_reg[25]/D
+ 62  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[10]/C            i_daisy/rxp_dat_sys_reg[26]/D
+ 63  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[11]/C            i_daisy/rxp_dat_sys_reg[27]/D
+ 64  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[12]/C            i_daisy/rxp_dat_sys_reg[28]/D
+ 65  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[13]/C            i_daisy/rxp_dat_sys_reg[29]/D
+ 66  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[14]/C            i_daisy/rxp_dat_sys_reg[30]/D
+ 67  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/genblk4[0].rxp_dat_n_reg[15]/C            i_daisy/rxp_dat_sys_reg[31]/D
+ 68  CDC-1   Critical  1-bit unknown CDC circuitry                             0  False Path  i_daisy/i_rx/genblk1[0].par_ok_reg[0]/C           i_daisy/sys_rdata_o_reg[4]/D
+ 69  CDC-4   Critical  Multi-bit unknown CDC circuitry                         0  False Path  i_daisy/genblk3[0].i_test/stat_dat_o_reg[31:0]/C  i_daisy/tst_dat_cnt_sys_reg[31:0]/D
+ 70  CDC-4   Critical  Multi-bit unknown CDC circuitry                         0  False Path  i_daisy/genblk3[0].i_test/stat_err_o_reg[31:0]/C  i_daisy/tst_err_cnt_sys_reg[31:0]/D
+
+Source Clock: pll_adc_clk
+Destination Clock: pll_dac_clk_2x
+CDC Type: User Ignored
+
+Row  ID     Severity  Description                  Depth  Exception   Source (From)     Destination (To)
+---  -----  --------  ---------------------------  -----  ----------  ----------------  ------------------
+  1  CDC-1  Critical  1-bit unknown CDC circuitry      0  False Path  rst_cnt_reg[0]/C  dac_axi_rstn_reg/D
+

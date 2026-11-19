@@ -26,26 +26,55 @@ def create_callback(
     on_frame: FrameHandler,
     on_event: EventHandler,
 ) -> Any:
+    def dispatch_frame(frame: RawSampleFrame) -> None:
+        loop.call_soon_threadsafe(on_frame, frame)
+
+    def dispatch_event(event: str, detail: str | None) -> None:
+        loop.call_soon_threadsafe(on_event, event, detail)
+
+    return create_synchronous_callback(
+        base_class,
+        settings,
+        dispatch_frame,
+        dispatch_event,
+    )
+
+
+def create_synchronous_callback(
+    base_class: type[Any],
+    settings: Settings,
+    on_frame: FrameHandler,
+    on_event: EventHandler,
+) -> Any:
+    """Build a callback whose handlers are safe to supply from a worker process.
+
+    ``create_callback`` marshals vendor callback threads onto an asyncio loop.
+    The isolated native worker has no asyncio loop, so it uses this lower-level
+    form and serializes the converted frame over its IPC connection instead.
+    """
+
     stream_id = secrets.randbits(64)
 
     class NativeCallback(base_class):  # type: ignore[misc]
         def __init__(self) -> None:
             super().__init__()
             self._previous_pack_id: int | None = None
+            self._fpga_lost_ch1 = 0
+            self._fpga_lost_ch2 = 0
 
         def _receive(self, pack: Any) -> None:
             try:
                 frame = self._convert(pack)
             except Exception as exc:
-                loop.call_soon_threadsafe(on_event, "malformed", _safe_error(exc))
+                on_event("malformed", _safe_error(exc))
                 return
-            loop.call_soon_threadsafe(on_frame, frame)
+            on_frame(frame)
 
         def receivePack(self, *args: Any) -> None:
             # 2.07 wrappers call receivePack(pack); 3.00 calls
             # receivePack(client, pack).
             if not args:
-                loop.call_soon_threadsafe(on_event, "malformed", "missing ADC packet")
+                on_event("malformed", "missing ADC packet")
                 return
             self._receive(args[-1])
 
@@ -64,19 +93,30 @@ def create_callback(
                 channel_pack_mismatch = _field(meta_1, "packId", 0) != _field(meta_2, "packId", 0)
                 if _sample_rate(meta_1, settings) != _sample_rate(meta_2, settings):
                     raise ValueError("channel sample rates do not match")
+                if _field(meta_1, "timeCapture", 0) != _field(meta_2, "timeCapture", 0):
+                    raise ValueError("channel acquisition timestamps do not match")
             meta = meta_1 if channel_1 is not None else meta_2
             pack_id = int(_field(meta, "packId", _field(pack, "packId", 0)))
             packet_gap = (
                 self._previous_pack_id is not None and pack_id != self._previous_pack_id + 1
             )
-            self._previous_pack_id = pack_id
             sample_rate = _sample_rate(meta, settings)
             sample_count = int(channel_1.size if channel_1 is not None else channel_2.size)  # type: ignore[union-attr]
-            return RawSampleFrame(
+            # Vendor streaming_fpga.cpp::passCh resets its overflow sums after
+            # each delivered buffer; fpgaLost therefore describes this packet.
+            # Our frame protocol exposes cumulative per-stream loss counters.
+            lost_1 = int(_field(meta_1, "fpgaLost", 0)) if channel_1 is not None else 0
+            lost_2 = int(_field(meta_2, "fpgaLost", 0)) if channel_2 is not None else 0
+            if lost_1 < 0 or lost_2 < 0:
+                raise ValueError("FPGA lost sample counts must be non-negative")
+            total_lost_1 = self._fpga_lost_ch1 + lost_1
+            total_lost_2 = self._fpga_lost_ch2 + lost_2
+            frame = RawSampleFrame(
                 stream_id=stream_id,
                 sequence=0,
                 source_pack_id=pack_id,
                 captured_at_unix_ns=time.time_ns(),
+                adc_capture_unix_ns=int(_field(meta, "timeCapture", 0)),
                 base_rate_hz=round(sample_rate * settings.decimation),
                 decimation=settings.decimation,
                 sample_rate_hz=sample_rate,
@@ -84,48 +124,56 @@ def create_callback(
                 channel_mask=settings.channel_mask,
                 channel_1=channel_1,
                 channel_2=channel_2,
-                fpga_lost_ch1=int(_field(meta_1, "fpgaLost", 0)),
-                fpga_lost_ch2=int(_field(meta_2, "fpgaLost", 0)),
+                fpga_lost_ch1=total_lost_1,
+                fpga_lost_ch2=total_lost_2,
                 packet_gap_detected=packet_gap or channel_pack_mismatch,
             )
+            # Commit continuity metadata only after the whole packet validates.
+            self._previous_pack_id = pack_id
+            self._fpga_lost_ch1 = total_lost_1
+            self._fpga_lost_ch2 = total_lost_2
+            return frame
 
         def connected(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "connected", None)
+            on_event("connected", None)
 
         def disconnected(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "disconnected", None)
+            on_event("disconnected", None)
 
         def error(self, *_args: Any) -> None:
             detail = _safe_error(_args[-1] if _args else None)
-            loop.call_soon_threadsafe(on_event, "error", detail)
+            on_event("error", detail)
 
         def stopped(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "stopped", None)
+            on_event("stopped", None)
 
         def stoppedNoActiveChannels(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "error", "no active channels")
+            on_event("error", "no active channels")
 
         def stoppedMemError(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "error", "streaming memory error")
+            on_event("error", "streaming memory error")
 
         def stoppedMemModify(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "error", "streaming memory changed")
+            on_event("error", "streaming memory changed")
 
         def configError(self, *_args: Any) -> None:
             detail = _safe_error(_args[-1]) if _args else "configuration rejected"
-            loop.call_soon_threadsafe(on_event, "config_error", detail)
+            on_event("config_error", detail)
 
         def configErrorTimeout(self, *_args: Any) -> None:
-            loop.call_soon_threadsafe(on_event, "config_error", "configuration timeout")
+            on_event("config_error", "configuration timeout")
 
     return NativeCallback()
 
 
 def _copy_channel(pack: Any, name: str) -> np.ndarray[Any, np.dtype[np.int16]]:
     channel = getattr(pack, name, None)
-    if channel is None or not hasattr(channel, "raw"):
+    # The vendor raw getter allocates a Python list for the entire buffer.
+    # hasattr would perform that conversion once, then the read would repeat it.
+    raw = getattr(channel, "raw", None)
+    if raw is None:
         raise ValueError(f"enabled {name} is missing raw samples")
-    array = np.array(channel.raw, dtype="<i2", copy=True, order="C")
+    array = np.array(raw, dtype="<i2", copy=True, order="C")
     if array.ndim != 1 or array.size == 0:
         raise ValueError(f"enabled {name} must contain a non-empty 1-D array")
     array.flags.writeable = False

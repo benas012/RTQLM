@@ -8,9 +8,12 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from apps.native_receiver.cluster_config import (
+    default_receiver_cluster_config,
+    receiver_cluster_config,
+)
 from quantum_light_engine.post_processing import (
     ClusterProcessingConfig,
-    config_from_dict,
     config_to_dict,
 )
 
@@ -57,12 +60,12 @@ def load_cluster_config() -> ClusterProcessingConfig:
         data = json.loads(CLUSTER_CONFIG_PATH.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("cluster processing configuration must be an object")
-        return config_from_dict(data)
+        return receiver_cluster_config(data)
     except FileNotFoundError:
-        return ClusterProcessingConfig()
+        return default_receiver_cluster_config()
     except (TypeError, ValueError, OSError) as exc:
         LOGGER.warning("invalid cluster processing configuration: %s", exc)
-        return ClusterProcessingConfig()
+        return default_receiver_cluster_config()
 
 
 def save_cluster_config(config: ClusterProcessingConfig) -> None:
