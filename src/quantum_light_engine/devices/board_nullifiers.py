@@ -18,6 +18,7 @@ from quantum_light_engine.post_processing import (
     config_to_dict,
     expression_mode_templates,
     lab_processing_config,
+    match_builtin_basis,
     processing_nullifiers,
     single_mode_processing_config,
 )
@@ -344,14 +345,7 @@ fi
                 _validate_config_keys(update, set(current))
                 config = config_from_dict({**current, **update})
                 if "measurementBasis" in update and "nullifiers" not in update:
-                    if (
-                        self.config.nullifiers
-                        == lab_processing_config(self.config.measurement_basis).nullifiers
-                    ):
-                        config = replace(
-                            config,
-                            nullifiers=lab_processing_config(config.measurement_basis).nullifiers,
-                        )
+                    config = match_builtin_basis(config, self.config)
                 self._call({"command": "configure", "config": self._settings(config)})
                 self.config = config
                 self._analysis_error = None

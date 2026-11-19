@@ -47,6 +47,9 @@ DEFAULT_CLUSTER_P = NullifierSpec(
      NullifierTerm("b", 0, 1.0), NullifierTerm("b", 1, -1.0)),
 )
 
+# Identity distinguishes an omitted formula from an explicitly supplied equal row.
+_DEFAULT_NULLIFIERS = (DEFAULT_CLUSTER_X,)
+
 LAB_CLUSTER_X = NullifierSpec(
     "cluster_x",
     (NullifierTerm("a", 0, 1), NullifierTerm("a", 1, 1),
@@ -84,7 +87,7 @@ class ClusterProcessingConfig:
     channel_b_delay_samples: int = 0
     gate_absolute_threshold: float | None = None
     explicit_mode_template: tuple[float, ...] = ()
-    nullifiers: tuple[NullifierSpec, ...] = (DEFAULT_CLUSTER_X,)
+    nullifiers: tuple[NullifierSpec, ...] = _DEFAULT_NULLIFIERS
     history_modes: int = 5_000
     window_mode: str = "continuous"
     lock_seconds: float = 0.005
@@ -99,7 +102,7 @@ class ClusterProcessingConfig:
     trigger_hysteresis_volts: float = 0.0
 
     def __post_init__(self) -> None:
-        if self.measurement_basis == "p" and self.nullifiers == (DEFAULT_CLUSTER_X,):
+        if self.measurement_basis == "p" and self.nullifiers is _DEFAULT_NULLIFIERS:
             object.__setattr__(self, "nullifiers", (DEFAULT_CLUSTER_P,))
         for name in ("mode_width_seconds", "measurement_frequency_hz",
                      "variance_window_seconds", "collect_seconds"):
@@ -301,6 +304,23 @@ def processing_nullifiers(config: ClusterProcessingConfig) -> tuple[NullifierSpe
         return tuple(spec for channel, spec in (("a", SINGLE_MODE_A), ("b", SINGLE_MODE_B))
                      if config.single_channel in {channel, "both"})
     return config.nullifiers
+
+
+def match_builtin_basis(
+    config: ClusterProcessingConfig, previous: ClusterProcessingConfig,
+) -> ClusterProcessingConfig:
+    """Switch an unedited preset row only when the user changes its basis."""
+    if (config.analysis_mode == "single" or config.measurement_basis == previous.measurement_basis
+            or config.nullifiers != previous.nullifiers):
+        return config
+    pairs = [(LAB_CLUSTER_X, LAB_CLUSTER_P)]
+    if previous.mode_shape != "lab_gaussian_linear_cosine":
+        pairs.append((DEFAULT_CLUSTER_X, DEFAULT_CLUSTER_P))
+    for x_row, p_row in pairs:
+        old, new = (x_row, p_row) if previous.measurement_basis == "x" else (p_row, x_row)
+        if previous.nullifiers == (old,):
+            return replace(config, nullifiers=(new,))
+    return config
 
 
 def _segment_calibration(config: ClusterProcessingConfig) -> bool:

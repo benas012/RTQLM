@@ -17,7 +17,6 @@ from apps.native_receiver.nullifier_acquisition import (
     AcquisitionWindowControls,
     AnalysisControls,
     acquisition_description,
-    match_builtin_basis,
 )
 from apps.native_receiver.nullifier_renderer import (
     AMPLITUDE_CHOICES,
@@ -29,6 +28,7 @@ from quantum_light_engine.post_processing import (
     config_from_dict,
     config_to_dict,
     lab_processing_config,
+    match_builtin_basis,
     single_mode_processing_config,
 )
 
@@ -281,7 +281,7 @@ class NullifierMonitorPanel(NullifierRendererMixin, ttk.Frame):
             "Lab rolling / average": "lab_rolling",
         }[self.variance_estimator.get()]
         self.analysis.apply_to(data)
-        return match_builtin_basis(config_from_dict(data))
+        return match_builtin_basis(config_from_dict(data), self.parent.cluster_processor.config)
 
     def _apply(self) -> None:
         try:

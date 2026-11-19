@@ -8,10 +8,7 @@ import numpy as np
 import pytest
 
 from apps.native_receiver import settings
-from apps.native_receiver.nullifier_acquisition import (
-    acquisition_description,
-    match_builtin_basis,
-)
+from apps.native_receiver.nullifier_acquisition import acquisition_description
 from apps.native_receiver.nullifier_renderer import clip_trace, finite_runs, select_nullifier_traces
 from quantum_light_engine.post_processing import (
     DEFAULT_CLUSTER_P,
@@ -21,8 +18,11 @@ from quantum_light_engine.post_processing import (
     ClusterProcessingResult,
     NullifierSpec,
     NullifierTerm,
+    RealtimeClusterProcessor,
+    config_from_dict,
     config_to_dict,
     lab_processing_config,
+    match_builtin_basis,
     processing_nullifiers,
     single_mode_processing_config,
 )
@@ -84,10 +84,10 @@ def test_uncalibrated_chart_displays_variance_and_calibrated_chart_displays_db()
 
 def test_basis_change_switches_builtin_formula_and_preserves_custom_formulas() -> None:
     config = ClusterProcessingConfig(nullifiers=(DEFAULT_CLUSTER_X,))
-    assert match_builtin_basis(replace(config, measurement_basis="p")).nullifiers == (
+    assert match_builtin_basis(replace(config, measurement_basis="p"), config).nullifiers == (
         DEFAULT_CLUSTER_P,
     )
-    assert match_builtin_basis(replace(config, measurement_basis="x")).nullifiers == (
+    assert match_builtin_basis(replace(config, measurement_basis="x"), config).nullifiers == (
         DEFAULT_CLUSTER_X,
     )
     custom = replace(
@@ -95,17 +95,43 @@ def test_basis_change_switches_builtin_formula_and_preserves_custom_formulas() -
         measurement_basis="p",
         nullifiers=(NullifierSpec("custom", (NullifierTerm("a", 2, -3.0),)),),
     )
-    assert match_builtin_basis(custom) is custom
+    assert match_builtin_basis(custom, config) is custom
 
 
 def test_single_mode_basis_changes_preserve_independent_channel_calculation() -> None:
-    config = replace(single_mode_processing_config(), measurement_basis="p", single_channel="b")
-    matched = match_builtin_basis(config)
+    previous = single_mode_processing_config()
+    config = replace(previous, measurement_basis="p", single_channel="b")
+    matched = match_builtin_basis(config, previous)
     assert matched is config
     rows = processing_nullifiers(matched)
     assert len(rows) == 1
     assert rows[0].terms == (NullifierTerm("b", 0, 1.0),)
     assert "Single-mode CH2" in acquisition_description(matched)
+
+
+@pytest.mark.parametrize("basis", ["x", "p"])
+def test_explicit_four_term_sign_edit_survives_apply_reload_and_acquisition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, basis: str,
+) -> None:
+    previous = lab_processing_config()
+    data = config_to_dict(previous)
+    terms = data["nullifiers"][0]["terms"]
+    terms[1]["weight"], terms[3]["weight"] = -1, 1
+    data.update(measurementBasis=basis, windowMode="continuous",
+                collectionGuardSeconds=0, collectionEndGuardSamples=0)
+    edited = match_builtin_basis(config_from_dict(data), previous)
+    monkeypatch.setattr(settings, "CLUSTER_CONFIG_PATH", tmp_path / "cluster.json")
+    settings.save_cluster_config(edited)
+    saved = settings.load_cluster_config()
+    assert config_to_dict(saved)["nullifiers"] == data["nullifiers"]
+
+    processor = RealtimeClusterProcessor(saved)
+    a, b = np.random.default_rng(417).normal(size=(2, 4096))
+    result = processor.feed(a, b, 125e6)
+    assert result is not None
+    qa, qb = result.quadratures["a"], result.quadratures["b"]
+    np.testing.assert_allclose(result.nullifiers["cluster_x"],
+                               qa[:-1] - qa[1:] + qb[:-1] + qb[1:])
 
 
 def test_receiver_defaults_to_requested_lock_collect_cycle(
