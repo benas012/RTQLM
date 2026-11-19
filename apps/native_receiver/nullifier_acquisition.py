@@ -19,6 +19,7 @@ from quantum_light_engine.post_processing import (
     config_to_dict,
     expression_mode_templates,
     mode_sample_bounds,
+    resolve_mode_schedule,
 )
 
 WINDOW_CHOICES = ("Periodic", "Continuous", "Triggered")
@@ -75,9 +76,9 @@ class AnalysisControls(ttk.Frame):
         )
         self.delay_spinbox = ttk.Spinbox(
             self, textvariable=self.variables["channel_b_delay_samples"],
-            from_=0, to=100, increment=1, width=8,
+            from_=0, to=100, increment=1, width=4,
         )
-        self.delay_spinbox.grid(row=3, column=0, sticky="ew", padx=(0, 12), pady=(0, 8))
+        self.delay_spinbox.grid(row=3, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
         if not compact:
             self._field(
                 "Single-mode channel", "channel", 2, 0,
@@ -137,11 +138,19 @@ class AnalysisControls(ttk.Frame):
             self._legacy_points = None
         try:
             width = float(self.variables["mode_width_us"].get()) * 1e-6
-            points, maximum = mode_sample_bounds(width, rate)
+            schedule = resolve_mode_schedule(width, rate)
+            points, maximum = schedule.shortest, schedule.longest
             counts = str(points) if points == maximum else f"{points}/{maximum}"
             timing = (f"actual width: {points / rate * 1e6:.9g} µs" if points == maximum else
-                      f"average width: {width * 1e6:.9g} µs · "
+                      f"average width: {schedule.step / rate * 1e6:.9g} µs · "
                       f"bins: {points / rate * 1e6:.9g}/{maximum / rate * 1e6:.9g} µs")
+            if 1 < schedule.denominator <= 8:
+                phase_pattern = [
+                    points + (index + 1) * schedule.remainder // schedule.denominator
+                    - index * schedule.remainder // schedule.denominator
+                    for index in range(schedule.denominator)
+                ]
+                timing += " · pattern: " + ", ".join(map(str, phase_pattern))
             self.sampling_readout.set(
                 f"Samples / mode: {counts} · {timing} "
                 f"at {rate / 1000:.6g} kS/s"

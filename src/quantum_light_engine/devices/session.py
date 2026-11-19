@@ -459,7 +459,7 @@ class DeviceSession:
             board_processor.measurement_window_ms = self.profile.measurement_window_ms
             board_processor.auto_install = self.engine_settings.native_nullifier_auto_install
             return board_processor
-        return DeviceNullifierProcessor()
+        return DeviceNullifierProcessor(sample_rate_hz=125_000_000 / self.profile.decimation)
 
     def _transition(self, state: DeviceSessionState) -> None:
         if state is not self._state:

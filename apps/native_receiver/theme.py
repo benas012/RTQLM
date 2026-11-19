@@ -159,6 +159,28 @@ def configure_style(window: tk.Tk) -> None:
         bordercolor=[("focus", COLORS["accent"]), ("readonly", COLORS["grid"])],
     )
     style.configure(
+        "TSpinbox",
+        fieldbackground=COLORS["panel_2"],
+        background=COLORS["panel_2"],
+        foreground=COLORS["text"],
+        insertcolor=COLORS["text"],
+        arrowcolor=COLORS["text"],
+        selectbackground=COLORS["selected"],
+        selectforeground=COLORS["text"],
+        bordercolor=COLORS["grid"],
+        lightcolor=COLORS["panel_2"],
+        darkcolor=COLORS["panel_2"],
+        padding=(5, 2),
+    )
+    style.map(
+        "TSpinbox",
+        fieldbackground=[("disabled", COLORS["panel"])],
+        background=[("disabled", COLORS["panel"]), ("active", COLORS["panel_3"])],
+        foreground=[("disabled", COLORS["text_disabled"])],
+        arrowcolor=[("disabled", COLORS["text_disabled"])],
+        bordercolor=[("focus", COLORS["accent"])],
+    )
+    style.configure(
         "TButton",
         background=COLORS["surface_elevated"],
         foreground=COLORS["text"],

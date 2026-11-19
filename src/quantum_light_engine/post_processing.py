@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import asdict, dataclass, field, fields, replace
-from functools import partial
-from itertools import pairwise
+from functools import lru_cache, partial
+from itertools import chain, pairwise
+from math import floor, isfinite
+from sys import float_info
 from typing import Any, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
 
-from quantum_light_engine.acquisition_windows import AcquisitionWindowGate
+from quantum_light_engine.acquisition_windows import AcquisitionSpan, AcquisitionWindowGate
 from quantum_light_engine.ensemble_variance import EnsembleNullifierVariance
 from quantum_light_engine.mode_expression import evaluate_mode_expression, parse_mode_expression
 
@@ -325,19 +327,77 @@ def mode_sample_count(width_seconds: float, sample_rate_hz: float, shape: str) -
             else round(points))
 
 
-def mode_sample_step(width_seconds: float, sample_rate_hz: float) -> float:
-    """Samples per requested period; snap only floating-point integer roundoff."""
-    if any(not np.isfinite(v) or v <= 0 for v in (width_seconds, sample_rate_hz)):
+@dataclass(frozen=True, slots=True)
+class ModeSchedule:
+    shortest: int
+    remainder: int = 0
+    denominator: int = 1
+
+    @property
+    def longest(self) -> int:
+        return self.shortest + bool(self.remainder)
+
+    @property
+    def step(self) -> float:
+        return self.shortest + self.remainder / self.denominator
+
+    def boundaries(self, first: int, available: int) -> npt.NDArray[np.int64]:
+        """Sample offsets relative to the first pending bin, including zero."""
+        if not self.remainder:
+            return np.arange(0, available + 1, self.shortest, dtype=np.int64)
+        phase = (first * self.remainder) % self.denominator
+        indices = np.arange(available // self.shortest + 1, dtype=np.int64)
+        offsets = (indices * self.shortest
+                   + (phase + indices * self.remainder) // self.denominator)
+        return offsets[offsets <= available]
+
+
+@lru_cache(maxsize=128)
+def resolve_mode_schedule(width_seconds: float, sample_rate_hz: float) -> ModeSchedule:
+    """Resolve the sample clock once. Keep the same rule as resolve_mode_schedule in C."""
+    if any(not isfinite(v) or v <= 0 for v in (width_seconds, sample_rate_hz)):
         raise ValueError("mode width and sample rate must be positive and finite")
     step = width_seconds * sample_rate_hz
+    if not isfinite(step):
+        raise ValueError("temporal mode sample count must be finite")
+    tolerance = 16 * float_info.epsilon * max(step, 1)
     nearest = round(step)
-    return float(nearest) if abs(step - nearest) <= 16 * np.finfo(float).eps * max(step, 1) \
-        else step
+    if abs(step - nearest) <= tolerance:
+        return ModeSchedule(nearest)
+
+    shortest = floor(step)
+    fraction = step - shortest
+    # Recover simple clock ratios within floating-point roundoff. Bound the
+    # denominator so integer phase products also fit on the ARM processor.
+    limit = 1_000_000_000
+    previous_num, num = 1, 0
+    previous_den, den = 0, 1
+    value = fraction
+    while value:
+        reciprocal = 1 / value
+        if reciprocal >= limit + 1:
+            break
+        term = floor(reciprocal)
+        next_den = term * den + previous_den
+        if next_den > limit:
+            break
+        previous_num, num = num, term * num + previous_num
+        previous_den, den = den, next_den
+        if abs(num / den - fraction) <= tolerance:
+            return ModeSchedule(shortest, num, den)
+        value = reciprocal - term
+    # Arbitrary widths fall back to the nearest billionth of a sample.
+    remainder = min(max(round(fraction * limit), 1), limit - 1)
+    return ModeSchedule(shortest, remainder, limit)
+
+
+def mode_sample_step(width_seconds: float, sample_rate_hz: float) -> float:
+    return resolve_mode_schedule(width_seconds, sample_rate_hz).step
 
 
 def mode_sample_bounds(width_seconds: float, sample_rate_hz: float) -> tuple[int, int]:
-    step = mode_sample_step(width_seconds, sample_rate_hz)
-    return int(np.floor(step)), int(np.ceil(step))
+    schedule = resolve_mode_schedule(width_seconds, sample_rate_hz)
+    return schedule.shortest, schedule.longest
 
 
 def build_lab_mode_template(
@@ -456,9 +516,9 @@ def expression_mode_templates(
     preset normalizes on a fine grid before interpolation; other shapes average
     sub-samples of each ADC sample and normalize on the ADC grid.
     """
-    step = (float(config.mode_samples) if config.mode_samples is not None
-            else mode_sample_step(config.mode_width_seconds, sample_rate_hz))
-    low, high = int(np.floor(step)), int(np.ceil(step))
+    schedule = (ModeSchedule(config.mode_samples) if config.mode_samples is not None
+                else resolve_mode_schedule(config.mode_width_seconds, sample_rate_hz))
+    low, high = schedule.shortest, schedule.longest
     if low < config.min_samples_per_mode or high > 4096:
         raise ValueError(f"Mode function requires {config.min_samples_per_mode}-4096 "
                          "samples in each temporal bin")
@@ -487,7 +547,7 @@ def expression_mode_templates(
             )
             mode = normalize_mode(np.mean(raw, axis=1), dt)
         templates[points] = np.asarray(mode, dtype=np.float64)
-    return step, templates
+    return schedule.step, templates
 
 
 def rolling_variance(
@@ -684,7 +744,7 @@ class RealtimeClusterProcessor:
         self.config = config or ClusterProcessingConfig()
         self._sample_rate_hz: float | None = None
         self._mode = np.empty(0, dtype=np.float64)
-        self._mode_step = 0.0
+        self._mode_schedule = ModeSchedule(0)
         self._mode_templates: dict[int, FloatArray] = {}
         self._moments = {"a": _RunningMoments(), "b": _RunningMoments()}
         self._shot_noise_coefficients: dict[str, float] = {}
@@ -729,12 +789,17 @@ class RealtimeClusterProcessor:
     def skipped_samples(self) -> int:
         return self._window_gate.skipped_samples if self._window_gate is not None else 0
 
-    def configure(self, config: ClusterProcessingConfig) -> None:
+    def configure(
+        self, config: ClusterProcessingConfig, *, sample_rate_hz: float | None = None,
+    ) -> None:
+        mode = self._build_mode(config, sample_rate_hz) if sample_rate_hz is not None else None
         self.config = config
         self._sample_rate_hz = None
         self._mode = np.empty(0, dtype=np.float64)
         self.clear_calibration()
         self.reset_stream()
+        if sample_rate_hz is not None and mode is not None:
+            self._set_mode(sample_rate_hz, *mode)
 
     def reset_stream(self, *, preserve_acquisition: bool = False) -> None:
         if preserve_acquisition:
@@ -749,6 +814,7 @@ class RealtimeClusterProcessor:
             self._window_gate: AcquisitionWindowGate | None = None
             self._mode_index = 0
             self._window_mode_index = 0
+            self._window_sequence = 0
         self._quadrature_history = _empty_quadratures()
         self._history_window_ids = np.empty(0, dtype=np.int64)
         self._ensemble = self._new_ensemble()
@@ -768,7 +834,8 @@ class RealtimeClusterProcessor:
         if _segment_calibration(self.config) and self._calibrating:
             self._commit_calibration_window()
         if self.config.variance_estimator == "lab_rolling" and self._sample_rate_hz:
-            self._lab_statistics.close(self._mode_step / self._sample_rate_hz, self.calibrated)
+            period = self._mode_schedule.step / self._sample_rate_hz
+            self._lab_statistics.close(period, self.calibrated)
         self._pending = _empty_quadratures()
         self._delay_remaining = abs(self.config.channel_b_delay_samples)
         self._current_window_id = None
@@ -826,58 +893,73 @@ class RealtimeClusterProcessor:
                 self._calibration_segment_counts[name] += moments.count
             moments.clear()
 
-    def _ensure_mode(self, sample_rate_hz: float) -> None:
+    @staticmethod
+    def _build_mode(
+        config: ClusterProcessingConfig, sample_rate_hz: float,
+    ) -> tuple[ModeSchedule, dict[int, FloatArray]]:
         if not np.isfinite(sample_rate_hz) or sample_rate_hz <= 0:
             raise ValueError("sample_rate_hz must be positive and finite")
-        if self._sample_rate_hz == sample_rate_hz and self._mode.size:
-            return
-        width = self.config.mode_width_seconds
+        width = config.mode_width_seconds
+        fixed = len(config.explicit_mode_template) or config.mode_samples
+        schedule = (ModeSchedule(fixed) if fixed is not None
+                    else resolve_mode_schedule(width, sample_rate_hz))
         templates: dict[int, FloatArray] = {}
-        if self.config.mode_expression:
-            step, templates = expression_mode_templates(self.config, sample_rate_hz)
-        elif self.config.explicit_mode_template:
-            raw = np.asarray(self.config.explicit_mode_template, dtype=np.float64)
-            if raw.size < self.config.min_samples_per_mode:
+        if config.mode_expression:
+            _, templates = expression_mode_templates(config, sample_rate_hz)
+        elif config.explicit_mode_template:
+            raw = np.asarray(config.explicit_mode_template, dtype=np.float64)
+            if raw.size < config.min_samples_per_mode:
                 raise ValueError(
                     f"explicit temporal mode has {raw.size} samples; at least "
-                    f"{self.config.min_samples_per_mode} are required"
+                    f"{config.min_samples_per_mode} are required"
                 )
             templates[raw.size] = normalize_mode(raw, 1 / sample_rate_hz)
-            step = float(raw.size)
         else:
-            step = (float(self.config.mode_samples) if self.config.mode_samples is not None
-                    else mode_sample_step(width, sample_rate_hz))
-            low, high = int(np.floor(step)), int(np.ceil(step))
-            if low < self.config.min_samples_per_mode or high > 4096:
+            low, high = schedule.shortest, schedule.longest
+            if low < config.min_samples_per_mode or high > 4096:
                 raise ValueError(f"temporal mode has only {low} samples in its shortest bin; "
-                                 f"at least {self.config.min_samples_per_mode} and at most 4096 "
+                                 f"at least {config.min_samples_per_mode} and at most 4096 "
                                  "are required")
             for points in {low, high}:
-                bin_width = (float(np.nextafter(points / sample_rate_hz, np.inf))
-                             if low != high or self.config.mode_samples is not None else width)
-                if self.config.mode_shape == "identity":
+                if config.mode_shape == "identity":
                     mode = normalize_mode(np.ones(points, dtype=np.float64), 1 / sample_rate_hz)
                 else:
+                    use_grid_width = (low != high or config.mode_samples is not None
+                                      or mode_sample_count(width, sample_rate_hz,
+                                                           config.mode_shape) != points)
+                    bin_width = (float(np.nextafter(points / sample_rate_hz, np.inf))
+                                 if use_grid_width else width)
                     builder = {
                         "lab_gaussian_linear_cosine": build_lab_mode_template,
                         "gaussian_linear": build_gauss_lin_mode_template,
                         "gaussian_linear_cosine": build_mode_template,
-                    }[self.config.mode_shape]
+                    }[config.mode_shape]
                     mode = builder(
-                        bin_width, self.config.measurement_frequency_hz, 1 / sample_rate_hz,
-                        oversample=self.config.mode_oversample,
-                        min_samples_per_mode=self.config.min_samples_per_mode,
+                        bin_width, config.measurement_frequency_hz, 1 / sample_rate_hz,
+                        oversample=config.mode_oversample,
+                        min_samples_per_mode=config.min_samples_per_mode,
                     )
                     if low != high:
                         # Equal discrete white-noise gain for both bin lengths.
                         mode = normalize_mode(mode, 1 / sample_rate_hz)
                 templates[points] = mode
+        return schedule, templates
+
+    def _ensure_mode(self, sample_rate_hz: float) -> None:
+        if self._sample_rate_hz == sample_rate_hz and self._mode.size:
+            return
+        schedule, templates = self._build_mode(self.config, sample_rate_hz)
         if self._sample_rate_hz is not None and self._sample_rate_hz != sample_rate_hz:
             # Changing ADC rate invalidates the integral and vacuum normalization.
             self.clear_calibration()
             self.reset_stream()
+        self._set_mode(sample_rate_hz, schedule, templates)
+
+    def _set_mode(
+        self, sample_rate_hz: float, schedule: ModeSchedule, templates: dict[int, FloatArray],
+    ) -> None:
         self._sample_rate_hz = sample_rate_hz
-        self._mode_step = step
+        self._mode_schedule = schedule
         self._mode_templates = templates
         self._mode = templates[min(templates)]
 
@@ -902,21 +984,35 @@ class RealtimeClusterProcessor:
     def feed(
         self, channel_a: npt.NDArray[np.number], channel_b: npt.NDArray[np.number],
         sample_rate_hz: float, *, discontinuity: bool = False,
+        e1_high: npt.NDArray[np.bool_ | np.uint8] | None = None,
     ) -> ClusterProcessingResult | None:
+        """Process a packet, optionally admitting only its sample-aligned E1 LOW runs."""
+        levels = None if e1_high is None else np.asarray(e1_high, dtype=np.bool_)
+        if levels is not None and levels.shape != (channel_a.size,):
+            raise ValueError("E1 levels must match the ADC sample count")
         if discontinuity:
             self.reset_stream()
         self._ensure_mode(sample_rate_hz)
         a = np.asarray(channel_a, dtype=np.float64)
         b = np.asarray(channel_b, dtype=np.float64)
         gate = self._ensure_window_gate(sample_rate_hz)
-        spans = gate.select(a, b)
+        selected = gate.select(a, b)
+        spans: Iterable[AcquisitionSpan | None] = selected
+        if levels is not None and not self._calibrating:
+            spans = self._e1_spans(selected, levels, gate)
         extracted_a: list[FloatArray] = []
         extracted_b: list[FloatArray] = []
         result_start = self._mode_index
         for span in spans:
+            if span is None:
+                if self._current_window_id is not None:
+                    self._close_window()
+                continue
             if self._current_window_id != span.window_id:
-                self._close_window()
+                if self._current_window_id is not None:
+                    self._close_window()
                 self._current_window_id = span.window_id
+                self._window_sequence += 1
             raw = self._extract_quadratures(a[span.start:span.stop],
                                             b[span.start:span.stop], sample_rate_hz)
             if raw is not None:
@@ -927,18 +1023,39 @@ class RealtimeClusterProcessor:
                         self._moments[name].update(values)
                         self._calibration_window[name].update(values)
                 else:
-                    self._append_history(raw, span.window_id)
+                    self._append_history(raw, self._window_sequence)
             if span.closes_window:
                 self._close_window()
         if not extracted_a:
             return None
         raw_quadratures = {"a": np.concatenate(extracted_a), "b": np.concatenate(extracted_b)}
-        period = self._mode_step / sample_rate_hz
+        period = self._mode_schedule.step / sample_rate_hz
         if self._calibrating:
             status = ("calibrating shot noise: "
                       f"A={self._moments['a'].count}, B={self._moments['b'].count} modes")
             return self._result(raw_quadratures, result_start, period, status)
         return self._live_result(raw_quadratures, period)
+
+    @staticmethod
+    def _e1_spans(
+        spans: Iterable[AcquisitionSpan], levels: npt.NDArray[np.bool_],
+        gate: AcquisitionWindowGate,
+    ) -> Iterator[AcquisitionSpan | None]:
+        edges = np.flatnonzero(levels[1:] != levels[:-1]) + 1
+        for span in spans:
+            first, last = edges.searchsorted((span.start, span.stop), side="right")
+            start = span.start
+            for stop in chain(edges[first:last], (span.stop,)):
+                if stop == start:
+                    continue
+                if levels[start]:
+                    gate.accepted_samples -= stop - start
+                    gate.skipped_samples += stop - start
+                    yield None
+                else:
+                    yield AcquisitionSpan(start, stop, span.window_id,
+                                          span.closes_window and stop == span.stop)
+                start = stop
 
     def _append_history(self, raw_quadratures: dict[str, FloatArray], window_id: int) -> None:
         normalized: dict[str, FloatArray] = {}
@@ -973,14 +1090,7 @@ class RealtimeClusterProcessor:
                 pending = self._pending[name]
                 self._pending[name] = np.concatenate((pending, values)) if pending.size else values
         available = min(values.size for values in self._pending.values())
-        first = self._window_mode_index
-        origin = int(np.floor(np.nextafter(first * self._mode_step, np.inf)))
-        limit = int(available / self._mode_step) + 2
-        boundaries = np.floor(np.nextafter(
-            np.arange(first, first + limit + 1, dtype=np.float64) * self._mode_step,
-            np.inf,
-        )).astype(np.int64) - origin
-        boundaries = boundaries[boundaries <= available]
+        boundaries = self._mode_schedule.boundaries(self._window_mode_index, available)
         mode_count = boundaries.size - 1
         if mode_count == 0:
             return None

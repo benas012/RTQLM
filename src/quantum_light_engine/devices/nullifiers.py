@@ -50,8 +50,9 @@ class DeviceNullifierProcessor:
     The lock also protects an in-flight worker when acquisition is cancelled.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, sample_rate_hz: float | None = None) -> None:
         self._processor = RealtimeClusterProcessor(lab_processing_config())
+        self._sample_rate_hz = sample_rate_hz
         self._lock = RLock()
         self._enabled = False
         self._revision = 0
@@ -78,7 +79,8 @@ class DeviceNullifierProcessor:
                             lab_processing_config(config.measurement_basis)
                         )["nullifiers"]
                         config = config_from_dict({**current, **update})
-                processor.configure(config)
+                rate = self._previous.sample_rate_hz if self._previous else self._sample_rate_hz
+                processor.configure(config, sample_rate_hz=rate)
                 self._revision += 1
                 self._enabled = True
             elif command.command == "disable":

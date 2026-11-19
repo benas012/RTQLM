@@ -39,10 +39,11 @@ the receiver selects the lab method explicitly.
 `lab_gaussian_linear_cosine` reproduces the script's Gaussian times linear times cosine shape.
 The cosine is **cos(t * meas_freq)**, while the Gaussian uses **2*pi*meas_freq**. This preserves
 the supplied convention. Oversampling creates coefficients, not new ADC measurements.
-Time-based extraction places boundary k at **floor(k * T * Fs)** rather than rounding T once.
-At 125 MS/s, T = 308 ns therefore alternates **38/39 samples** (304/312 ns), averaging 308 ns
-without accumulated rounding drift. Each bin-length template has unit discrete white-noise
-gain. The UI reports both sample counts and the average period. Fixed `modeSamples` or an
+Time-based extraction resolves T × Fs into a whole-sample count and a fractional remainder.
+It advances the remainder using integer arithmetic and preserves its phase across packets.
+At 125 MS/s, 304 ns gives **38 samples**, 308 ns repeats **38, 39**, and 310 ns repeats
+**38, 39, 39, 39**. Each fractional bin-length template has unit discrete white-noise gain.
+The UI reports the sample counts, average period and short repeating patterns. Fixed `modeSamples` or an
 explicit template retain fixed-size bins; the standalone lab-template helper retains its
 fine-grid normalization convention for compatibility.
 

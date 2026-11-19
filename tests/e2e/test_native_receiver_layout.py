@@ -8,6 +8,7 @@ from tkinter import ttk
 
 import pytest
 
+from apps.native_receiver.constants import COLORS
 from quantum_light_engine.post_processing import config_to_dict, single_mode_processing_config
 from tests.e2e.test_native_receiver_rendering import receiver
 
@@ -32,6 +33,13 @@ def check_original_layout() -> None:
         app.attributes("-alpha", 0)
         panel = app.nullifier_panel
         controls = panel.analysis
+        delay = controls.delay_spinbox
+        style = ttk.Style(app)
+        spinbox_style = str(delay.cget("style")) or delay.winfo_class()
+        for state in ((), ("focus",), ("readonly",)):
+            assert style.lookup(spinbox_style, "fieldbackground", state) == COLORS["panel_2"]
+            assert style.lookup(spinbox_style, "foreground", state) == COLORS["text"]
+            assert style.lookup(spinbox_style, "arrowcolor", state) == COLORS["text"]
         rate = [125_000_000.0]
         original_provider = controls.sample_rate_provider
         original_config = app.cluster_processor.config
@@ -44,6 +52,9 @@ def check_original_layout() -> None:
         assert 'Samples / mode: 38/39' in controls.sampling_readout.get()
         assert 'average width: 0.308' in controls.sampling_readout.get()
         assert 'bins: 0.304/0.312' in controls.sampling_readout.get()
+        assert 'pattern: 38, 39' in controls.sampling_readout.get()
+        controls.variables['mode_width_us'].set('.310')
+        assert 'pattern: 38, 39, 39, 39' in controls.sampling_readout.get()
         controls.variables['mode_width_us'].set('.320')
         rate[0] = 15_625_000
         controls.refresh_sampling()
@@ -90,6 +101,8 @@ def check_original_layout() -> None:
             assert panel.acquisition.winfo_ismapped()
             assert panel.analysis.winfo_ismapped()
             assert panel.canvas.winfo_height() >= 120
+            assert delay.winfo_width() == delay.winfo_reqwidth()
+            assert delay.winfo_width() < controls.grid_bbox(0, 3)[2] - 12
             assert_controls_inside(panel.setup_window)
             panel._hide_settings()
             app.update()

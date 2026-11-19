@@ -106,12 +106,9 @@ the FPGA image, stops another application, changes the device tree, or modifies 
 Do not use burst capture concurrently with the raw streaming receiver. The burst adapter takes an advisory lock
 against other instances of this processor; unrelated applications do not share that lock.
 
-For tagged E1 readouts, the full ADC record includes both digital states. Measurement
-projection admits only modes whose samples are all E1 LOW; any HIGH sample rejects
-the mode. Formula spans and rolling variances cannot bridge those rejected regions.
-Shot-noise calibration still uses both HIGH and LOW. This reverses the earlier
-HIGH-only measurement policy without changing the FPGA word format or adding an
-edge-settling delay. The slow non-tagged GPIO interlock described below is separate.
+For tagged E1 readouts, the full ADC record includes both digital states. Each LOW interval
+starts its own measurement clock and contributes its complete temporal bins. Shot-noise
+calibration uses both HIGH and LOW.
 
 The DMA region must fit both captures. Addresses are aligned to 4096 bytes and capacity is checked
 using the SDK's two-byte ADC words per sample per channel. A 50 ms capture uses about
@@ -126,7 +123,7 @@ descriptors; every capture still rearms acquisition and disables both DMA channe
 
 For non-tagged legacy readouts only, buffered hardware captures require HIGH on
 **DIO0_P (E1 physical pin 3)** by default. The tagged readouts described below capture
-the full record and exclude LOW intervals only from calculation.
+the full record and admit LOW intervals for measurement.
 The adapter configures
 that pin as input, waits for HIGH before starting the ADC, checks while waiting for trigger/fill,
 and checks once more after stopping. An observed LOW during an active capture discards the whole
@@ -185,18 +182,15 @@ Tile sizes are KiB per rail. `e1_tile64x2` projects the two rails concurrently w
 persistent worker. `rawProjection` includes tagged validation and any tile copies.
 Each stored sample, including guards and padding, needs a valid marker and matching E1
 tags on both rails. The entire requested record is captured, regardless of E1 level.
-LOW is a calculation mask: a temporal mode touching LOW on either delayed rail is
-represented by NaN without removing its time index. Cluster formulas cannot span a
-LOW gap, and rolling variance restarts within each contiguous HIGH region. Shot-noise
-calibration ignores E1: all complete temporal modes within the configured guards are
-used, including LOW and transitions, and each capture is one calibration segment.
-Marker and paired-tag integrity checks still apply during calibration. Averaging never
-fills a LOW region in the current measurement record with an
-older result. Display downsampling retains gaps, including ones shorter than a display
-stride. `capturedModes`, `includedModes` and `excludedModes` report the latest record.
-Even an all-LOW record is accepted, with no finite calculated results. Invalid format
-markers or mismatched E1 tags still reject corrupt records. Tagged acquisition does
-not wait for HIGH and does not use GPIO polling to infer the mask.
+Measurement starts a new bin schedule at each contiguous E1 LOW interval. It integrates
+complete bins whose aligned samples fit within that interval. An ordinary boundary between
+raw ADC regions preserves bin phase. HIGH intervals appear as gaps in the result, separating
+cluster formulas and rolling-variance windows. Shot-noise calibration uses all complete
+temporal modes within the guards and treats the whole capture as one calibration segment.
+Marker and paired-tag integrity checks apply in both cases. Averaging preserves gaps in the
+current record. Display downsampling retains gaps shorter than a display stride.
+`capturedModes`, `includedModes` and `excludedModes` report the result slots, completed LOW
+bins, and gaps respectively. An all-HIGH capture is valid and has no finite measurement result.
 Tagged capture requires immediate triggering,
 decimation 1, `DIO0_P` and no voltage rejection threshold. With `previewPoints`, the
 worker returns a calibrated voltage preview sampled across the measurement. Its

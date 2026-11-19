@@ -132,26 +132,73 @@ static void unit_noise_gain(double *mode, unsigned size, double rate) {
     for (unsigned i = 0; i < size; ++i) mode[i] /= norm;
 }
 
-static int make_mode(nf_processor *p, char *error) {
+static unsigned fixed_mode_size(const nf_config *c) {
+    return c->template_count ? c->template_count : c->mode_samples;
+}
+
+static bool same_mode_clock(const nf_processor *p, const nf_processor *candidate) {
+    const nf_config *c = &candidate->config;
+    unsigned fixed = fixed_mode_size(c);
+    return p->enabled && p->sample_rate == candidate->sample_rate &&
+           fixed == fixed_mode_size(&p->config) &&
+           (fixed || p->config.mode_width == c->mode_width);
+}
+
+static int resolve_mode_schedule(nf_processor *p, char *error) {
+    unsigned fixed = fixed_mode_size(&p->config);
+    double step = fixed ? fixed : p->config.mode_width * p->sample_rate;
+    if (!isfinite(step)) FAIL("invalid samples per temporal mode");
+    double tolerance = 16 * DBL_EPSILON * fmax(step, 1);
+    double nearest = nearbyint(step);
+    if (fabs(step - nearest) <= tolerance) step = nearest;
+    if (step > NF_MAX_TEMPLATE || floor(step) < p->config.min_samples)
+        FAIL("invalid samples per temporal mode");
+    unsigned shortest = (unsigned)step;
+    double fraction = step - shortest;
+    uint32_t numerator = 0, denominator = 1;
+    if (fraction) {
+        /* Keep in sync with resolve_mode_schedule in post_processing.py. */
+        const uint32_t limit = 1000000000;
+        uint32_t previous_num = 1, previous_den = 0;
+        double value = fraction;
+        while (value) {
+            double reciprocal = 1 / value;
+            if (reciprocal >= limit + 1) break;
+            uint32_t term = (uint32_t)reciprocal;
+            uint64_t next_den = (uint64_t)term * denominator + previous_den;
+            if (next_den > limit) break;
+            uint32_t next_num = term * numerator + previous_num;
+            previous_num = numerator; numerator = next_num;
+            previous_den = denominator; denominator = (uint32_t)next_den;
+            if (fabs((double)numerator / denominator - fraction) <= tolerance) break;
+            value = reciprocal - term;
+        }
+        if (fabs((double)numerator / denominator - fraction) > tolerance) {
+            double rounded = nearbyint(fraction * limit);
+            numerator = (uint32_t)fmin(fmax(rounded, 1), limit - 1);
+            denominator = limit;
+        }
+    }
+    p->mode_size = shortest;
+    p->mode_size_max = shortest + (numerator != 0);
+    p->mode_remainder = numerator; p->mode_denominator = denominator;
+    p->mode_step = shortest + (double)numerator / denominator;
+    return 0;
+}
+
+static int make_mode(nf_processor *p, unsigned small, char *error) {
     /* Configuration-time quadrature weights: never regenerate exp/cos or the
      * oversampled integration grid per capture. Fractional boundaries retain
      * the requested period; each supported bin length keeps unit noise gain.
      * gaussian_linear is Larsen Eq. (3.25); the separate lab shape deliberately
      * retains its established cosine/interpolation convention. */
     const nf_config *c = &p->config;
-    double step = c->template_count ? c->template_count :
-                  (c->mode_samples ? c->mode_samples : c->mode_width * p->sample_rate);
-    double nearest = nearbyint(step);
-    if (fabs(step - nearest) <= 16 * DBL_EPSILON * fmax(step, 1)) step = nearest;
-    if (step > NF_MAX_TEMPLATE || floor(step) < c->min_samples)
-        FAIL("invalid samples per temporal mode");
-    p->mode_step = step;
-    unsigned small = (unsigned)floor(step), large = (unsigned)ceil(step);
+    unsigned large = p->mode_size_max;
+    if (small < c->min_samples) FAIL("invalid samples per temporal mode");
     if (c->sampled_counts[0] &&
         (c->template_count || c->sampled_counts[0] != small ||
          c->sampled_counts[1] != (large == small ? 0 : large)))
         FAIL("sampled templates must match the shortest and longest temporal bins");
-    p->mode_size_max = large;
     if (small == large)
         return make_fixed_mode(p, small, c->mode_samples ? small / p->sample_rate : c->mode_width, error);
     if (make_fixed_mode(p, large, nextafter(large / p->sample_rate, INFINITY), error)) return -1;
@@ -163,10 +210,27 @@ static int make_mode(nf_processor *p, char *error) {
 }
 
 uint64_t nf_mode_boundary(const nf_processor *p, uint64_t index) {
-    return (uint64_t)floor(nextafter((double)index * p->mode_step, INFINITY));
+    if (!p->mode_remainder) return index * p->mode_size;
+    uint64_t rounds = index / p->mode_denominator;
+    uint64_t phase = (index % p->mode_denominator) * p->mode_remainder;
+    return index * p->mode_size + rounds * p->mode_remainder + phase / p->mode_denominator;
+}
+
+static unsigned next_mode_size(const nf_processor *p, uint32_t *phase) {
+    *phase += p->mode_remainder;
+    if (*phase < p->mode_denominator) return p->mode_size;
+    *phase -= p->mode_denominator;
+    return p->mode_size + 1;
 }
 
 size_t nf_mode_count(const nf_processor *p, size_t samples, uint64_t first_mode) {
+    if (!p->mode_remainder) return samples / p->mode_size;
+    uint32_t denominator = p->mode_denominator;
+    if (samples < UINT64_MAX / denominator) {
+        uint64_t phase = ((first_mode % denominator) * p->mode_remainder) % denominator;
+        uint64_t step = (uint64_t)p->mode_size * denominator + p->mode_remainder;
+        return (((uint64_t)samples + 1) * denominator - 1 - phase) / step;
+    }
     uint64_t origin = nf_mode_boundary(p, first_mode);
     size_t modes = (size_t)(samples / p->mode_step);
     while (modes && nf_mode_boundary(p, first_mode + modes) - origin > samples) modes--;
@@ -291,7 +355,15 @@ int nf_configure(nf_processor *p, const nf_config *c, char *error) {
     nf_processor *candidate = calloc(1, sizeof(*candidate));
     if (!candidate) FAIL("cannot allocate configuration");
     candidate->config = *c; candidate->sample_rate = 125000000.0 / c->decimation;
-    int result = make_mode(candidate, error);
+    bool reuse_clock = same_mode_clock(p, candidate);
+    int result = 0;
+    if (reuse_clock) {
+        candidate->mode_size = p->mode_size; candidate->mode_size_max = p->mode_size_max;
+        candidate->mode_step = p->mode_step;
+        candidate->mode_remainder = p->mode_remainder;
+        candidate->mode_denominator = p->mode_denominator;
+    } else result = resolve_mode_schedule(candidate, error);
+    if (!result) result = make_mode(candidate, candidate->mode_size, error);
     double guard = nearbyint(c->guard_seconds * candidate->sample_rate);
     unsigned measurement = c->measurement_samples ? c->measurement_samples : c->capture_samples;
     if (!result && (guard + c->end_guard + abs(c->b_delay) + candidate->mode_size > measurement)) {
@@ -309,8 +381,14 @@ int nf_configure(nf_processor *p, const nf_config *c, char *error) {
         nf_clear_calibration(p); p->config = *c; p->sample_rate = candidate->sample_rate;
         p->mode_size = candidate->mode_size; p->mode_size_max = candidate->mode_size_max;
         p->mode_step = candidate->mode_step;
-        for (unsigned k = 0; k <= c->history_modes; ++k)
-            p->raw_boundaries[k] = (uint32_t)nf_mode_boundary(p, k);
+        p->mode_remainder = candidate->mode_remainder;
+        p->mode_denominator = candidate->mode_denominator;
+        if (!reuse_clock) p->raw_boundary_count = 0;
+        unsigned first = p->raw_boundary_count;
+        uint32_t phase = ((uint64_t)first * p->mode_remainder) % p->mode_denominator;
+        for (unsigned k = first; k < c->history_modes; ++k)
+            p->raw_boundaries[k + 1] = p->raw_boundaries[k] + next_mode_size(p, &phase);
+        if (p->raw_boundary_count < c->history_modes) p->raw_boundary_count = c->history_modes;
         memcpy(p->mode, candidate->mode, sizeof(p->mode));
         memcpy(p->mode_large, candidate->mode_large, sizeof(p->mode_large));
         p->revision++; p->enabled = true;
@@ -450,11 +528,11 @@ int nf_process_at(nf_processor *p, const float *a, const float *b, size_t count,
     double inverse_rate = 1.0 / p->sample_rate;
     const float *aligned_a = a + begin + (c->b_delay < 0 ? delay : 0);
     const float *aligned_b = b + begin + (c->b_delay > 0 ? delay : 0);
-    uint64_t origin = nf_mode_boundary(p, first_mode);
+    uint32_t phase = ((first_mode % p->mode_denominator) * p->mode_remainder) % p->mode_denominator;
+    size_t base = 0;
     for (size_t k = 0; k < modes; ++k) {
         double sum[2] = {0, 0}; bool valid = true;
-        size_t base = nf_mode_boundary(p, first_mode + k) - origin;
-        unsigned size = (unsigned)(nf_mode_boundary(p, first_mode + k + 1) - origin - base);
+        unsigned size = next_mode_size(p, &phase);
         const double *mode = size == p->mode_size ? p->mode : p->mode_large;
         for (unsigned j = 0; j < size; ++j) {
             double va = aligned_a[base + j], vb = aligned_b[base + j];
@@ -467,6 +545,7 @@ int nf_process_at(nf_processor *p, const float *a, const float *b, size_t count,
         for (unsigned channel = 0; channel < 2; ++channel) {
             q[channel][k] = valid ? sum[channel] * inverse_rate : NAN;
         }
+        base += size;
     }
     return nf_process_modes(p, q, modes, error);
 }
@@ -752,62 +831,145 @@ int nf_validate_tagged_pair(const nf_raw_channel raw[2], char *error) {
     return 0;
 }
 
-int nf_prepare_tagged(nf_processor *p, size_t measurement, nf_tagged_plan *plan,
-                      double *q[2], char *error) {
+static size_t tagged_run_end(const nf_raw_channel *raw, size_t start, size_t end, uint16_t level) {
+    while (start < end) {
+        unsigned region = start >= raw->size[0];
+        size_t offset = region ? start - raw->size[0] : start;
+        size_t count = raw->size[region] - offset;
+        if (count > end - start) count = end - start;
+        const int16_t *data = raw->data[region] + offset;
+        size_t i = 0;
+#if defined(__ARM_NEON)
+        uint16x8_t mask = vdupq_n_u16(0x4000u), e1 = vdupq_n_u16(level);
+        for (; count - i >= 8; i += 8) {
+            uint16x8_t words = vreinterpretq_u16_s16(vld1q_s16(data + i));
+            uint64x2_t differences = vreinterpretq_u64_u16(vandq_u16(veorq_u16(words, e1), mask));
+            if (vgetq_lane_u64(differences, 0) | vgetq_lane_u64(differences, 1)) break;
+        }
+#endif
+        for (; i < count; ++i)
+            if (((uint16_t)data[i] & 0x4000u) != level) return start + i;
+        start += count;
+    }
+    return end;
+}
+
+int nf_prepare_tagged(nf_processor *p, const nf_raw_channel raw[2], size_t measurement,
+                      nf_tagged_plan *plan, double *q[2], char *error) {
     if (!p->enabled) FAIL("configure the processor first");
     const nf_config *c = &p->config;
     size_t begin = (size_t)nearbyint(c->guard_seconds * p->sample_rate);
     size_t delay = (size_t)abs(c->b_delay);
+    if (measurement > raw[0].size[0] + raw[0].size[1]) FAIL("measurement exceeds packed ADC data");
     if (measurement <= begin + c->end_guard + delay) FAIL("capture has no usable samples");
-    size_t modes = nf_mode_count(p, measurement - begin - c->end_guard - delay, 0);
+    size_t end = measurement - c->end_guard;
+    size_t modes = nf_mode_count(p, end - begin - delay, 0);
     if (!modes) FAIL("capture has no complete temporal mode");
     *plan = (nf_tagged_plan){{begin + (c->b_delay < 0 ? delay : 0),
                              begin + (c->b_delay > 0 ? delay : 0)},
                             modes > c->history_modes ? c->history_modes : modes,
-                            modes > c->history_modes};
+                            modes > c->history_modes, NULL};
+    /* Shot-noise calibration uses the unbroken capture clock on both E1 levels. */
+    if (!p->calibrating) {
+        if (p->tagged_capacity < c->history_modes) {
+            uint32_t *bins = realloc(p->tagged_bins, c->history_modes * sizeof(*bins));
+            if (!bins) FAIL("cannot allocate tagged mode boundaries");
+            p->tagged_bins = bins;
+            p->tagged_capacity = c->history_modes;
+        }
+        uint32_t *bins = p->tagged_bins;
+        memset(bins, 0xff, plan->modes * sizeof(*bins));
+        size_t used = 0, initialized = plan->modes, start = begin;
+        uint16_t level = (uint16_t)(start < raw[0].size[0] ? raw[0].data[0][start] :
+                                    raw[0].data[1][start - raw[0].size[0]]) & 0x4000u;
+        while (start < end) {
+            size_t stop = tagged_run_end(&raw[0], start, end, level);
+            if (!level && stop - start > delay) {
+                size_t low_modes = nf_mode_count(p, stop - start - delay, 0);
+                if (low_modes) {
+                    /* Retain time slots through HIGH and always leave a gap
+                     * between LOW runs so a formula cannot cross the edge. */
+                    size_t slot = nf_mode_count(p, start - begin, 0);
+                    if (used && slot <= used) slot = used + 1;
+                    if (slot >= c->history_modes) {
+                        plan->truncated = true;
+                        break;
+                    }
+                    if (slot > initialized)
+                        memset(bins + initialized, 0xff, (slot - initialized) * sizeof(*bins));
+                    if (low_modes > c->history_modes - slot) {
+                        low_modes = c->history_modes - slot;
+                        plan->truncated = true;
+                    }
+                    uint32_t base = (uint32_t)(start - begin);
+                    for (size_t i = 0; i < low_modes; ++i) {
+                        bool long_bin = p->raw_boundaries[i + 1] - p->raw_boundaries[i] > p->mode_size;
+                        bins[slot + i] = (base + p->raw_boundaries[i]) |
+                                         (long_bin ? NF_TAGGED_LONG_BIN : 0);
+                    }
+                    used = slot + low_modes;
+                    if (used > initialized) initialized = used;
+                }
+            }
+            start = stop;
+            level ^= 0x4000u;
+        }
+        if (used > plan->modes) plan->modes = used;
+        plan->bins = bins;
+    }
     if (mode_buffers(p, q, plan->modes)) FAIL("cannot allocate mode buffer");
     return 0;
 }
 
+static uint32_t tagged_bin(const nf_processor *p, const nf_tagged_plan *plan, size_t index) {
+    if (plan->bins) return plan->bins[index];
+    bool long_bin = p->raw_boundaries[index + 1] - p->raw_boundaries[index] > p->mode_size;
+    return p->raw_boundaries[index] | (long_bin ? NF_TAGGED_LONG_BIN : 0);
+}
+
 uint16_t nf_project_tagged_rail(const nf_processor *p, const nf_raw_channel *raw,
-                               size_t start, size_t modes, int16_t *tile, size_t tile_words,
-                               double *q) {
-    size_t total = raw->size[0] + raw->size[1];
-    size_t end = start + p->raw_boundaries[modes];
-    uint16_t tags = tagged_span(raw, 0, start, NULL) & tagged_span(raw, end, total - end, NULL);
+                               const nf_tagged_plan *plan, unsigned channel, int16_t *tile,
+                               size_t tile_words, double *q) {
+    size_t start = plan->start[channel];
+    uint16_t tags = TAGGED_ADMITTED;
     bool flat = !p->config.template_count && !p->config.sampled_counts[0] &&
                 !strcmp(p->config.shape, "identity");
     double inverse_rate = 1.0 / p->sample_rate;
-    const uint32_t *boundaries = p->raw_boundaries;
     size_t k = 0;
-    while (k < modes && (tags & 0x8000u)) {
-        size_t first = boundaries[k], next = k + 1;
-        uint16_t tile_tags = TAGGED_ADMITTED;
-        if (tile) {
-            while (next < modes && boundaries[next + 1] - first <= tile_words) ++next;
-            tile_tags = tagged_span(raw, start + first, boundaries[next] - first, tile);
-            tags &= tile_tags;
+    while (k < plan->modes && (tags & 0x8000u)) {
+        uint32_t bin = tagged_bin(p, plan, k);
+        if (bin == NF_TAGGED_GAP) { q[k++] = NAN; continue; }
+        size_t first = bin & NF_TAGGED_OFFSET_MASK, next = k + 1;
+        size_t end = first + p->mode_size + !!(bin & NF_TAGGED_LONG_BIN);
+        bool tiled = tile && end - first <= tile_words;
+        if (tiled) {
+            while (next < plan->modes) {
+                bin = tagged_bin(p, plan, next);
+                if ((bin & NF_TAGGED_OFFSET_MASK) != end) break;
+                size_t size = p->mode_size + !!(bin & NF_TAGGED_LONG_BIN);
+                if (end + size - first > tile_words) break;
+                end += size;
+                ++next;
+            }
+            tags &= tagged_span(raw, start + first, end - first, tile);
             if (!(tags & 0x8000u)) break;
         }
         for (; k < next; ++k) {
-            size_t base = boundaries[k], count = boundaries[k + 1] - base;
+            bin = tagged_bin(p, plan, k);
+            size_t base = bin & NF_TAGGED_OFFSET_MASK;
+            size_t count = p->mode_size + !!(bin & NF_TAGGED_LONG_BIN);
             const double *weights = count == p->mode_size ? p->mode : p->mode_large;
             const int16_t *data;
             int16_t wrapped[NF_MAX_TEMPLATE];
-            uint16_t mode_tags = TAGGED_ADMITTED;
             size_t pos = start + base;
-            if (tile) data = tile + base - first;
+            if (tiled) data = tile + base - first;
             else if (pos >= raw->size[0]) data = raw->data[1] + pos - raw->size[0];
             else if (count <= raw->size[0] - pos) data = raw->data[0] + pos;
             else {
-                mode_tags = tagged_span(raw, pos, count, wrapped);
+                tagged_span(raw, pos, count, wrapped);
                 data = wrapped;
             }
-            if (!tile || tile_tags != TAGGED_ADMITTED) mode_tags &= tagged_copy(data, count, NULL);
-            tags &= mode_tags;
-            /* A shot-noise reference is valid independently of the experiment's
-             * E1 gate. Keep integrity checks, but mask HIGH only in measurement. */
-            if (mode_tags != TAGGED_ADMITTED && !p->calibrating) { q[k] = NAN; continue; }
+            if (!tiled) tags &= tagged_copy(data, count, NULL);
             double value = flat ? raw_flat(data, count, raw->zero, weights[0]) :
                                  raw_weighted(data, count, weights, raw->zero, false);
             q[k] = value * inverse_rate;
@@ -1026,4 +1188,8 @@ int nf_process_modes(nf_processor *p, double *q[2], size_t modes, char *error) {
     return 0;
 }
 
-void nf_destroy(nf_processor *p) { nf_clear_results(p); }
+void nf_destroy(nf_processor *p) {
+    nf_clear_results(p);
+    free(p->tagged_bins);
+    p->tagged_bins = NULL; p->tagged_capacity = 0;
+}

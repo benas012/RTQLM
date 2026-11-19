@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define SAMPLES 2500000u
 #define STORED 2500032u
@@ -39,6 +40,50 @@ static double projected(const nf_raw_channel *raw, size_t start, bool calibratin
     }
     return sum / sqrt(RATE * WIDTH);
 }
+
+static size_t next_low_mode(unsigned pattern, size_t start, size_t delay) {
+    size_t run = 0;
+    for (size_t i = start; i < SAMPLES; ++i) {
+        if (high(pattern, i)) run = 0;
+        else if (++run == WIDTH + delay) return i + 1 - run;
+    }
+    return SAMPLES;
+}
+
+static void check_packet_split(bool interrupted) {
+    nf_processor *p = calloc(1, sizeof(*p));
+    nf_config c;
+    nf_defaults(&c);
+    c.capture_samples = 128; c.mode_width = 0.308 * 1e-6;
+    c.b_delay = 0; c.guard_seconds = 0; c.end_guard = 0;
+    strcpy(c.shape, "identity");
+    char error[NF_ERROR_SIZE];
+    require(p && !nf_configure(p, &c, error), error);
+    int16_t data[78];
+    size_t count = 77 + interrupted;
+    for (size_t i = 0; i < count; ++i)
+        data[i] = (int16_t)(i | (interrupted && i == 20 ? 0xc000u : 0x8000u));
+    nf_raw_channel rail = {{data, data + 20}, {20, count - 20}, 0, NULL};
+    nf_raw_channel raw[2] = {rail, rail};
+    nf_tagged_plan plan; double *q[2];
+    require(!nf_validate_tagged_pair(raw, error), error);
+    require(!nf_prepare_tagged(p, raw, count, &plan, q, error), error);
+    for (unsigned ch = 0; ch < 2; ++ch)
+        require(nf_project_tagged_rail(p, &raw[ch], &plan, ch, NULL, 0, q[ch]) & 0x8000,
+                "valid split rejected");
+    nf_finish_tagged(p, &plan, q, true);
+    require(p->included_modes == (interrupted ? 1u : 2u), "wrong count across split");
+    size_t first = interrupted ? 21 : 0;
+    require(plan.bins[0] == first, "wrong start or length of first bin");
+    double sum = (double)(2 * first + 37) * 38 / 2;
+    require(fabs(q[0][0] - sum / sqrt(RATE * 38)) < 1e-12, "wrong first quadrature");
+    if (!interrupted) {
+        require(plan.bins[1] == (38u | NF_TAGGED_LONG_BIN), "wrong second bin");
+        require(fabs(q[0][1] - 57.0 * 39 / sqrt(RATE * 39)) < 1e-12, "wrong second quadrature");
+    }
+    require(!nf_process_modes(p, q, plan.modes, error), error);
+    nf_destroy(p); free(p);
+}
 static void check(unsigned pattern, int delay, size_t tile_words, bool calibrate, bool history) {
     nf_processor *p = calloc(1, sizeof(*p));
     nf_config c; nf_defaults(&c);
@@ -74,26 +119,31 @@ static void check(unsigned pattern, int delay, size_t tile_words, bool calibrate
         }
         require(!nf_validate_tagged_pair(raw, error), error);
         nf_tagged_plan plan; double *q[2];
-        require(!nf_prepare_tagged(p, SAMPLES, &plan, q, error), error);
+        require(!nf_prepare_tagged(p, raw, SAMPLES, &plan, q, error), error);
         for (unsigned ch = 0; ch < 2; ++ch)
-            require(nf_project_tagged_rail(p, &raw[ch], plan.start[ch], plan.modes,
+            require(nf_project_tagged_rail(p, &raw[ch], &plan, ch,
                                           tile, tile_words, q[ch]) & 0x8000, "valid format rejected");
         nf_finish_tagged(p, &plan, q, true);
-        size_t accepted = 0;
+        size_t accepted = 0, cursor = 0;
         long double sum[2] = {0}, squares[2] = {0};
         for (size_t k = 0; k < plan.modes; ++k) {
-            double expected[2] = {projected(&raw[0], plan.start[0] + k * WIDTH, calibrate),
-                                  projected(&raw[1], plan.start[1] + k * WIDTH, calibrate)};
-            bool ok = isfinite(expected[0]) && isfinite(expected[1]);
-            accepted += ok;
+            if (!calibrate && plan.bins[k] == NF_TAGGED_GAP) {
+                require(isnan(q[0][k]) && isnan(q[1][k]), "HIGH displayed as a quadrature");
+                continue;
+            }
+            size_t start = calibrate ? k * WIDTH : next_low_mode(gate, cursor, (size_t)abs(delay));
+            require(start != SAMPLES && (calibrate || plan.bins[k] == start),
+                    "unexpected LOW bin boundary");
+            cursor = start + WIDTH;
+            ++accepted;
             for (unsigned ch = 0; ch < 2; ++ch) {
-                if (ok) {
-                    require(fabs(q[ch][k] - expected[ch]) < 1e-12, "valid projection changed");
-                    sum[ch] += expected[ch]; squares[ch] += (long double)expected[ch] * expected[ch];
-                }
-                else require(isnan(q[ch][k]), "HIGH/transition mode integrated or indices compressed");
+                double expected = projected(&raw[ch], plan.start[ch] + start, calibrate);
+                require(fabs(q[ch][k] - expected) < 1e-12, "valid projection changed");
+                sum[ch] += expected; squares[ch] += (long double)expected * expected;
             }
         }
+        if (!calibrate)
+            require(next_low_mode(gate, cursor, (size_t)abs(delay)) == SAMPLES, "missing LOW bin");
         require(p->included_modes == accepted && p->excluded_modes == plan.modes - accepted,
                 "gate mode counts differ from raw E1 oracle");
         require(plan.modes == (SAMPLES - (size_t)abs(delay)) / WIDTH, "record time compressed");
@@ -148,6 +198,8 @@ static void check(unsigned pattern, int delay, size_t tile_words, bool calibrate
     free(tile); free(data[0]); free(data[1]); nf_destroy(p); free(p);
 }
 int main(void) {
+    check_packet_split(false);
+    check_packet_split(true);
     const size_t tiles[] = {0, 64, 256, 1024};
     for (unsigned i = 0; i < 4; ++i) {
         check(0, 0, tiles[i], false, false);

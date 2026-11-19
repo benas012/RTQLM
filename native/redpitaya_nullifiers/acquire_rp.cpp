@@ -94,13 +94,14 @@ struct TaggedE1 {
 struct RailProjection {
     const nf_processor *processor;
     const nf_raw_channel *raw;
-    size_t start, modes;
+    const nf_tagged_plan *plan;
+    unsigned channel;
     int16_t *tile;
     size_t tile_words;
     double *q;
 
     uint16_t run() const {
-        return nf_project_tagged_rail(processor, raw, start, modes, tile, tile_words, q);
+        return nf_project_tagged_rail(processor, raw, plan, channel, tile, tile_words, q);
     }
 };
 
@@ -170,10 +171,10 @@ static int project_tagged(nf_processor *processor, const nf_raw_channel raw[2], 
     }
     nf_tagged_plan plan;
     if (nf_validate_tagged_pair(raw, error)) return -1;
-    if (nf_prepare_tagged(processor, measurement, &plan, q, error)) return -1;
+    if (nf_prepare_tagged(processor, raw, measurement, &plan, q, error)) return -1;
     RailProjection rails[2];
     for (unsigned ch = 0; ch < 2; ++ch)
-        rails[ch] = {processor, &raw[ch], plan.start[ch], plan.modes,
+        rails[ch] = {processor, &raw[ch], &plan, ch,
                      tile_words ? raw_scratch[ch].data() : nullptr, tile_words, q[ch]};
     if (parallel) tagged_worker->submit(rails[1]);
     const uint16_t a = rails[0].run();

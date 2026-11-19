@@ -136,12 +136,15 @@ class ReceiverToolsMixin:
     def apply_cluster_config(self, config: ClusterProcessingConfig) -> None:
         if self.__dict__.get("_calibration_started") is not None:
             self.clear_cluster_calibration()
-        if self.__dict__.get("cluster_board_backend", False):
+        board_backend = self.__dict__.get("cluster_board_backend", False)
+        if board_backend:
             from quantum_light_engine.post_processing import config_to_dict
 
             self._board_nullifier_command("configure", config_to_dict(config))
         with self.cluster_lock:
-            self.cluster_processor.configure(config)
+            self.cluster_processor.configure(
+                config, sample_rate_hz=None if board_backend else self.mode_sample_rate_hz(),
+            )
             self.latest_cluster_result = None
             self.cluster_error = None
             self.cluster_last_sequence = None
@@ -193,7 +196,9 @@ class ReceiverToolsMixin:
 
         def apply(devices: list[Any]) -> None:
             with self.cluster_lock:
-                self.cluster_processor.configure(config)
+                self.cluster_processor.configure(
+                    config, sample_rate_hz=62_500_000 if server_stream else 125_000_000,
+                )
             save_cluster_config(config)
             self._clear_live_plot()
             self._apply_loaded_devices(devices)

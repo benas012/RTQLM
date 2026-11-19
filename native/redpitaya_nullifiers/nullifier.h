@@ -12,6 +12,9 @@
 #define NF_DEFAULT_HISTORY 25000
 #define NF_MAX_CAPTURE_SAMPLES 8388608
 #define NF_ERROR_SIZE 256
+#define NF_TAGGED_LONG_BIN UINT32_C(0x80000000)
+#define NF_TAGGED_OFFSET_MASK UINT32_C(0x7fffffff)
+#define NF_TAGGED_GAP UINT32_MAX
 
 typedef struct { unsigned source, offset; double weight; } nf_term;
 typedef struct {
@@ -61,7 +64,11 @@ typedef struct {
     size_t captured_modes, included_modes, excluded_modes;
     double sample_rate, mode_step, mode[NF_MAX_TEMPLATE], mode_large[NF_MAX_TEMPLATE], coefficients[2];
     unsigned mode_size, mode_size_max;
+    uint32_t mode_remainder, mode_denominator;
+    unsigned raw_boundary_count;
     uint32_t raw_boundaries[NF_MAX_HISTORY + 1];
+    uint32_t *tagged_bins;
+    size_t tagged_capacity;
     double *quadratures[2];
     size_t quadrature_count;
     nf_moments calibration[2], segment_variances[2];
@@ -83,6 +90,9 @@ typedef struct {
 typedef struct {
     size_t start[2], modes;
     bool truncated;
+    /* Per-slot sample offsets relative to start[], with a size bit and gap
+     * sentinel. NULL selects the uninterrupted calibration clock. */
+    const uint32_t *bins;
 } nf_tagged_plan;
 
 #ifdef __cplusplus
@@ -104,13 +114,14 @@ int nf_project_raw_dma(nf_processor *processor, const nf_raw_channel channels[2]
                        double *quadratures[2], size_t *modes, char *error);
 /* Tagged readouts are explicit so stock boards keep using the calibrated FPGA path. */
 bool nf_tagged_readout(const char *name, size_t *tile_words, bool *parallel);
-int nf_prepare_tagged(nf_processor *p, size_t measurement, nf_tagged_plan *plan,
-                      double *q[2], char *error);
+/* Validate both raw rails with nf_validate_tagged_pair before preparing a plan. */
+int nf_prepare_tagged(nf_processor *p, const nf_raw_channel raw[2], size_t measurement,
+                      nf_tagged_plan *plan, double *q[2], char *error);
 int nf_validate_tagged_pair(const nf_raw_channel raw[2], char *error);
 /* raw covers the full capture. A tile, if supplied, holds at least one complete mode. */
 uint16_t nf_project_tagged_rail(const nf_processor *p, const nf_raw_channel *raw,
-                               size_t start, size_t modes, int16_t *tile, size_t tile_words,
-                               double *q);
+                               const nf_tagged_plan *plan, unsigned channel, int16_t *tile,
+                               size_t tile_words, double *q);
 void nf_finish_tagged(nf_processor *p, const nf_tagged_plan *plan, double *q[2], bool accepted);
 /* Consumes both allocated quadrature arrays on success or failure. */
 int nf_process_modes(nf_processor *processor, double *quadratures[2], size_t modes, char *error);
