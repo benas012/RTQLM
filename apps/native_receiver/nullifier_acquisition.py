@@ -4,16 +4,11 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
-from dataclasses import replace
 from tkinter import ttk
 from typing import Any
 
 from quantum_light_engine.mode_expression import MODE_EXPRESSIONS
 from quantum_light_engine.post_processing import (
-    DEFAULT_CLUSTER_P,
-    DEFAULT_CLUSTER_X,
-    LAB_CLUSTER_P,
-    LAB_CLUSTER_X,
     ClusterProcessingConfig,
     config_from_dict,
     config_to_dict,
@@ -29,22 +24,6 @@ CALIBRATION_CHOICES = {
     "Whole accepted trace": "pooled",
     "Average collection variances": "segment_mean",
 }
-
-
-def match_builtin_basis(config: ClusterProcessingConfig) -> ClusterProcessingConfig:
-    """Switch the single built-in 1D row with its basis, preserving custom formulas."""
-    if config.analysis_mode == "single":
-        return config
-    if config.nullifiers in ((LAB_CLUSTER_X,), (LAB_CLUSTER_P,)) or (
-        config.mode_shape == "lab_gaussian_linear_cosine"
-        and config.nullifiers in ((DEFAULT_CLUSTER_X,), (DEFAULT_CLUSTER_P,))
-    ):
-        preset = LAB_CLUSTER_X if config.measurement_basis == "x" else LAB_CLUSTER_P
-        return replace(config, nullifiers=(preset,))
-    if config.nullifiers in ((DEFAULT_CLUSTER_X,), (DEFAULT_CLUSTER_P,)):
-        preset = DEFAULT_CLUSTER_X if config.measurement_basis == "x" else DEFAULT_CLUSTER_P
-        return replace(config, nullifiers=(preset,))
-    return config
 
 
 class AnalysisControls(ttk.Frame):

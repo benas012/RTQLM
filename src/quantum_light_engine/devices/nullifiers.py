@@ -16,6 +16,7 @@ from quantum_light_engine.post_processing import (
     config_from_dict,
     config_to_dict,
     lab_processing_config,
+    match_builtin_basis,
     processing_nullifiers,
 )
 from redpitaya_acquisition.domain.frame import RawSampleFrame
@@ -73,12 +74,7 @@ class DeviceNullifierProcessor:
                 config = config_from_dict({**current, **update})
                 # A basis-only command must switch a built-in formula as well.
                 if "measurementBasis" in update and "nullifiers" not in update:
-                    old_basis = processor.config.measurement_basis
-                    if processor.config.nullifiers == lab_processing_config(old_basis).nullifiers:
-                        current["nullifiers"] = config_to_dict(
-                            lab_processing_config(config.measurement_basis)
-                        )["nullifiers"]
-                        config = config_from_dict({**current, **update})
+                    config = match_builtin_basis(config, processor.config)
                 rate = self._previous.sample_rate_hz if self._previous else self._sample_rate_hz
                 processor.configure(config, sample_rate_hz=rate)
                 self._revision += 1

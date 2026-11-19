@@ -10,7 +10,12 @@ import pytest
 
 from apps.native_receiver.native_result import native_result
 from quantum_light_engine.devices.board_nullifiers import BoardNullifierProcessor
-from quantum_light_engine.post_processing import config_to_dict, single_mode_processing_config
+from quantum_light_engine.post_processing import (
+    DEFAULT_CLUSTER_X,
+    config_to_dict,
+    lab_processing_config,
+    single_mode_processing_config,
+)
 
 
 def processor():
@@ -147,9 +152,12 @@ def test_receiver_uses_only_the_selected_calculation_backend(monkeypatch, board,
     context.__aenter__ = AsyncMock(return_value=websocket)
     context.__aexit__ = AsyncMock(return_value=False)
     client = Mock()
+    # The receiver has the edited lab X row, with the minus on the second term.
+    config = replace(lab_processing_config(), nullifiers=(DEFAULT_CLUSTER_X,))
     client.request.return_value = {'nullifierBackend': 'redpitaya-arm-c' if board else 'host'}
-    if matching_config:
-        client.request.return_value['config'] = config_to_dict(single_mode_processing_config())
+    client.request.return_value['config'] = config_to_dict(
+        config if matching_config else lab_processing_config()
+    )
     monkeypatch.setattr(stream_controller.websockets, 'connect', lambda *a, **k: context)
     monkeypatch.setattr(stream_controller, 'EngineClient', Mock(return_value=client))
     monkeypatch.setattr(stream_controller, 'parse_frame', lambda _: frame)
@@ -157,7 +165,7 @@ def test_receiver_uses_only_the_selected_calculation_backend(monkeypatch, board,
     receiver = SimpleNamespace(
         events=queue.Queue(), stop_event=stop, selected_device=SimpleNamespace(id='board'),
         _api_base=lambda: 'http://engine', cluster_lock=threading.Lock(),
-        cluster_processor=SimpleNamespace(config=single_mode_processing_config()),
+        cluster_processor=SimpleNamespace(config=config),
         _native_nullifier_loop=AsyncMock(), _process_cluster_frame=Mock(),
         frame_lock=threading.Lock(), socket_frame_count=0, sample_history=Mock(),
     )
@@ -169,3 +177,6 @@ def test_receiver_uses_only_the_selected_calculation_backend(monkeypatch, board,
     assert client.request.call_count == ((2 if matching_config else 3) if board else 1)
     assert sum(call.args[0] == 'POST' for call in client.request.call_args_list) == (
         int(board and not matching_config))
+    if board and not matching_config:
+        posted = client.request.call_args_list[-1].args[2]
+        assert posted == {"command": "configure", "config": config_to_dict(config)}

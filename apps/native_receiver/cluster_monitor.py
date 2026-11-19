@@ -14,7 +14,6 @@ from apps.native_receiver.helpers import format_readout, set_if_changed
 from apps.native_receiver.nullifier_acquisition import (
     AcquisitionWindowControls,
     AnalysisControls,
-    match_builtin_basis,
 )
 from apps.native_receiver.nullifier_renderer import PLOT_CHOICES, NullifierRendererMixin
 from quantum_light_engine.post_processing import (
@@ -22,6 +21,7 @@ from quantum_light_engine.post_processing import (
     config_from_dict,
     config_to_dict,
     lab_processing_config,
+    match_builtin_basis,
     single_mode_processing_config,
 )
 
@@ -308,6 +308,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         return body
 
     def _load(self, config: ClusterProcessingConfig) -> None:
+        self._loaded_config = config
         self._clear_plot_view()
         data = config_to_dict(config)
         self.mode_width_us.set(f"{config.mode_width_seconds * 1e6:g}")
@@ -347,7 +348,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         )
         self.acquisition.apply_to(data)
         self.analysis.apply_to(data)
-        return match_builtin_basis(config_from_dict(data))
+        return match_builtin_basis(config_from_dict(data), self._loaded_config)
 
     def _load_preset(self) -> None:
         basis = self.acquisition.variables["basis"].get()
@@ -392,6 +393,7 @@ class ClusterMonitorDialog(NullifierRendererMixin, tk.Toplevel):
         try:
             config = self._config()
             self.parent.apply_cluster_config(config)
+            self._load(config)
             self.status.set("Configuration applied; shot-noise calibration was cleared")
         except Exception as exc:
             messagebox.showerror("Invalid cluster configuration", str(exc), parent=self)

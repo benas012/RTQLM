@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from dataclasses import replace
@@ -67,6 +68,21 @@ def check_nullifier_tabs() -> None:
                 assert bottom <= app.winfo_height()
             # The setup control applies both endpoints and forwards the value to C.
             board = BoardNullifierProcessor("board.local", "/root/processor", 1, 3, 18902)
+            # Keep the lab X name and move its minus sign from B[n+1] to A[n+1].
+            editor = ClusterMonitorDialog(app)
+            rows = json.loads(editor.nullifier_text.get("1.0", "end"))
+            terms = rows[0]["terms"]
+            terms[1]["weight"], terms[3]["weight"] = -1, 1
+            editor.nullifier_text.delete("1.0", "end")
+            editor.nullifier_text.insert("1.0", json.dumps(rows))
+            editor._apply()
+            assert json.loads(editor.nullifier_text.get("1.0", "end")) == rows
+            editor._close()
+            panel._apply()
+            applied = app.cluster_processor.config
+            assert config_to_dict(applied)["nullifiers"] == rows
+            assert board._settings(applied)["nullifiers"] == rows
+            app.apply_cluster_config(lab_processing_config())
             for delay in (0, 100, 2):
                 panel.analysis.variables["channel_b_delay_samples"].set(str(delay))
                 panel._apply()

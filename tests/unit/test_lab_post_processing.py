@@ -5,7 +5,6 @@ import numpy as np
 import pytest
 
 from apps.native_receiver.cluster_config import receiver_cluster_config
-from apps.native_receiver.nullifier_acquisition import match_builtin_basis
 from quantum_light_engine.post_processing import (
     LAB_CLUSTER_P,
     LAB_CLUSTER_X,
@@ -18,6 +17,7 @@ from quantum_light_engine.post_processing import (
     config_from_dict,
     config_to_dict,
     lab_processing_config,
+    match_builtin_basis,
     normalize_mode,
     rolling_variance,
 )
@@ -50,16 +50,17 @@ def test_lab_signs_basis_and_p_start_match_supplied_script() -> None:
     np.testing.assert_allclose(compute_nullifier({"a": a, "b": b}, LAB_CLUSTER_P),
                                (a[1:-1] - a[2:]) + (b[1:-1] + b[2:]))
     x = lab_processing_config()
-    assert match_builtin_basis(replace(x, measurement_basis="p")).nullifiers == (LAB_CLUSTER_P,)
+    assert match_builtin_basis(replace(x, measurement_basis="p"), x).nullifiers == (LAB_CLUSTER_P,)
     assert config_from_dict(config_to_dict(x)) == x
     assert receiver_cluster_config({}).mode_shape == "lab_gaussian_linear_cosine"
 
 
 @pytest.mark.parametrize("basis, expected", [("x", LAB_CLUSTER_X), ("p", LAB_CLUSTER_P)])
 def test_lab_basis_switch_preserves_signs_with_a_flat_temporal_template(basis, expected) -> None:
-    config = replace(lab_processing_config("p" if basis == "x" else "x"),
-                     mode_shape="identity", mode_samples=16, measurement_basis=basis)
-    assert match_builtin_basis(config).nullifiers == (expected,)
+    previous = replace(lab_processing_config("p" if basis == "x" else "x"),
+                       mode_shape="identity", mode_samples=16)
+    config = replace(previous, measurement_basis=basis)
+    assert match_builtin_basis(config, previous).nullifiers == (expected,)
 
 
 @pytest.mark.parametrize("width", [10, 11, 17])
